@@ -152,3 +152,43 @@ html {
 html * {
   transition: background-color 0.3s ease, border-color 0.3s ease, color 0.2s ease;
 }
+
+/* ============================================
+   MOBILE / iOS SPECIFIC FIXES
+   ============================================ */
+
+/* Fix iOS 100vh issue */
+@supports (-webkit-touch-callout: none) {
+  .main-layout {
+    height: -webkit-fill-available;
+  }
+}
+
+/* Prevent iOS zoom on inputs (font-size must be >= 16px) */
+@media (max-width: 768px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+
+  /* Better touch targets on mobile */
+  button {
+    min-height: 36px;
+  }
+
+  /* Prevent text selection during quick taps */
+  .nav-tab,
+  .mobile-toggle-btn,
+  .fullscreen-toggle {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Smoother scrolling on iOS */
+  .panel-content,
+  .time-grid-container,
+  .tasks-container,
+  .calendar-body {
+    -webkit-overflow-scrolling: touch;
+  }
+}

@@ -16,6 +16,8 @@ import {
   Keyboard,
   Sun,
   Moon,
+  List,
+  Calendar,
 } from 'lucide-react';
 import './MainLayout.css';
 
@@ -33,7 +35,18 @@ export default function MainLayout({ leftPanel, rightPanel }) {
   const { user, signOut, isConfigured } = useAuth();
   const { theme, toggleTheme, isDark } = useTheme();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [mobilePanel, setMobilePanel] = useState('list'); // 'list' or 'calendar'
+  const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const menuRef = useRef(null);
+
+  // Track screen size
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth <= 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
   // Close menu when clicking outside
   useEffect(() => {
@@ -82,6 +95,7 @@ export default function MainLayout({ leftPanel, rightPanel }) {
   }, [setActiveTab, leftPanelFullscreen, rightPanelFullscreen, exitFullscreen]);
 
   const getLayoutClass = () => {
+    if (isMobile) return 'layout-mobile';
     if (leftPanelFullscreen) return 'layout-left-fullscreen';
     if (rightPanelFullscreen) return 'layout-right-fullscreen';
     return 'layout-split';
@@ -106,6 +120,9 @@ export default function MainLayout({ leftPanel, rightPanel }) {
     }
     return 'U';
   };
+
+  const showLeftPanel = isMobile ? mobilePanel === 'list' : !rightPanelFullscreen;
+  const showRightPanel = isMobile ? mobilePanel === 'calendar' : !leftPanelFullscreen;
 
   return (
     <div className="main-layout">
@@ -134,7 +151,7 @@ export default function MainLayout({ leftPanel, rightPanel }) {
           </button>
         </nav>
         <div className="header-actions">
-          {(leftPanelFullscreen || rightPanelFullscreen) && (
+          {(leftPanelFullscreen || rightPanelFullscreen) && !isMobile && (
             <button className="fullscreen-exit-btn" onClick={exitFullscreen}>
               <Minimize2 size={18} />
               <span>Exit Fullscreen</span>
@@ -221,46 +238,74 @@ export default function MainLayout({ leftPanel, rightPanel }) {
         </div>
       </header>
 
+      {/* Mobile Panel Toggle */}
+      {isMobile && (
+        <div className="mobile-panel-toggle">
+          <button
+            className={`mobile-toggle-btn ${mobilePanel === 'list' ? 'active' : ''}`}
+            onClick={() => setMobilePanel('list')}
+          >
+            <List size={16} />
+            <span>{activeTab === 'goals' ? 'Goals' : 'Tasks'}</span>
+          </button>
+          <button
+            className={`mobile-toggle-btn ${mobilePanel === 'calendar' ? 'active' : ''}`}
+            onClick={() => setMobilePanel('calendar')}
+          >
+            <Calendar size={16} />
+            <span>Calendar</span>
+          </button>
+        </div>
+      )}
+
       {/* Main Content Area */}
       <main className={`main-content ${getLayoutClass()}`}>
         {/* Left Panel */}
-        <section
-          className={`panel left-panel ${leftPanelFullscreen ? 'fullscreen' : ''} ${rightPanelFullscreen ? 'hidden' : ''}`}
-        >
-          <div className="panel-header">
-            <h2>{activeTab === 'goals' ? 'Goals' : 'Tasks'}</h2>
-            <button
-              className="fullscreen-toggle"
-              onClick={toggleLeftFullscreen}
-              title={leftPanelFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
-            >
-              {leftPanelFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-            </button>
-          </div>
-          <div className="panel-content">{leftPanel}</div>
-        </section>
+        {showLeftPanel && (
+          <section
+            className={`panel left-panel ${leftPanelFullscreen ? 'fullscreen' : ''}`}
+          >
+            {!isMobile && (
+              <div className="panel-header">
+                <h2>{activeTab === 'goals' ? 'Goals' : 'Tasks'}</h2>
+                <button
+                  className="fullscreen-toggle"
+                  onClick={toggleLeftFullscreen}
+                  title={leftPanelFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                >
+                  {leftPanelFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                </button>
+              </div>
+            )}
+            <div className="panel-content">{leftPanel}</div>
+          </section>
+        )}
 
-        {/* Divider */}
-        {!leftPanelFullscreen && !rightPanelFullscreen && (
+        {/* Divider (desktop only) */}
+        {!isMobile && !leftPanelFullscreen && !rightPanelFullscreen && (
           <div className="panel-divider" />
         )}
 
         {/* Right Panel */}
-        <section
-          className={`panel right-panel ${rightPanelFullscreen ? 'fullscreen' : ''} ${leftPanelFullscreen ? 'hidden' : ''}`}
-        >
-          <div className="panel-header">
-            <h2>{activeTab === 'goals' ? 'Long-Term Calendar' : 'Short-Term Calendar'}</h2>
-            <button
-              className="fullscreen-toggle"
-              onClick={toggleRightFullscreen}
-              title={rightPanelFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
-            >
-              {rightPanelFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-            </button>
-          </div>
-          <div className="panel-content">{rightPanel}</div>
-        </section>
+        {showRightPanel && (
+          <section
+            className={`panel right-panel ${rightPanelFullscreen ? 'fullscreen' : ''}`}
+          >
+            {!isMobile && (
+              <div className="panel-header">
+                <h2>{activeTab === 'goals' ? 'Long-Term Calendar' : 'Short-Term Calendar'}</h2>
+                <button
+                  className="fullscreen-toggle"
+                  onClick={toggleRightFullscreen}
+                  title={rightPanelFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                >
+                  {rightPanelFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                </button>
+              </div>
+            )}
+            <div className="panel-content">{rightPanel}</div>
+          </section>
+        )}
       </main>
     </div>
   );
