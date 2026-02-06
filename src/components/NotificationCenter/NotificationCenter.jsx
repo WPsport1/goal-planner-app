@@ -39,6 +39,12 @@ import {
   createNightRoutineReminder,
   createReflectionReminder,
 } from '../../services/notifications';
+import {
+  isFirebaseConfigured,
+  initializeFirebase,
+  getFCMToken,
+  onForegroundMessage,
+} from '../../services/firebase';
 import './NotificationCenter.css';
 
 export default function NotificationCenter() {
@@ -54,6 +60,9 @@ export default function NotificationCenter() {
   const [isSupported, setIsSupported] = useState(true);
   const [activeTab, setActiveTab] = useState('settings');
   const [testingSound, setTestingSound] = useState(false);
+  const [firebaseEnabled, setFirebaseEnabled] = useState(false);
+  const [fcmToken, setFcmToken] = useState(null);
+  const [settingUpFirebase, setSettingUpFirebase] = useState(false);
 
   // Default settings
   const [settings, setSettings] = useState({
@@ -111,7 +120,32 @@ export default function NotificationCenter() {
   useEffect(() => {
     setIsSupported(isNotificationSupported());
     setPermissionStatus(getPermissionStatus());
+    setFirebaseEnabled(isFirebaseConfigured());
+
+    // Check for existing FCM token
+    const savedToken = localStorage.getItem('fcmToken');
+    if (savedToken) {
+      setFcmToken(savedToken);
+    }
   }, []);
+
+  // Set up foreground message listener
+  useEffect(() => {
+    if (firebaseEnabled && fcmToken) {
+      const unsubscribe = onForegroundMessage((payload) => {
+        console.log('Foreground message:', payload);
+        // Show as local notification
+        showLocalNotification(payload.notification?.title || 'Goal Planner', {
+          body: payload.notification?.body,
+          data: payload.data,
+        });
+        if (settings.sound) {
+          playNotificationSound(settings.soundType);
+        }
+      });
+      return () => unsubscribe && unsubscribe();
+    }
+  }, [firebaseEnabled, fcmToken, settings.sound, settings.soundType]);
 
   // Get scheduled notifications
   const scheduledNotifications = getScheduledNotifications();
@@ -123,12 +157,28 @@ export default function NotificationCenter() {
   };
 
   const handleRequestPermission = async () => {
-    const result = await requestPermission();
-    setPermissionStatus(result.permission || getPermissionStatus());
+    setSettingUpFirebase(true);
 
-    if (result.success) {
-      // Initialize the notification system
-      await initializeNotifications();
+    try {
+      const result = await requestPermission();
+      setPermissionStatus(result.permission || getPermissionStatus());
+
+      if (result.success) {
+        // Initialize the notification system
+        await initializeNotifications();
+
+        // If Firebase is configured, get FCM token for push notifications
+        if (isFirebaseConfigured()) {
+          initializeFirebase();
+          const tokenResult = await getFCMToken();
+          if (tokenResult.success) {
+            setFcmToken(tokenResult.token);
+            setFirebaseEnabled(true);
+          }
+        }
+      }
+    } finally {
+      setSettingUpFirebase(false);
     }
   };
 
@@ -205,9 +255,9 @@ export default function NotificationCenter() {
             <h4>Enable Notifications</h4>
             <p>Allow notifications to receive reminders for tasks, habits, and routines - even when the app is closed.</p>
           </div>
-          <button className="enable-btn" onClick={handleRequestPermission}>
+          <button className="enable-btn" onClick={handleRequestPermission} disabled={settingUpFirebase}>
             <BellRing size={18} />
-            Enable Now
+            {settingUpFirebase ? 'Setting up...' : 'Enable Now'}
           </button>
         </div>
       );
@@ -219,6 +269,16 @@ export default function NotificationCenter() {
         <div>
           <h4>Notifications Enabled</h4>
           <p>You'll receive alerts for your tasks, habits, and routines.</p>
+          {firebaseEnabled && fcmToken && (
+            <span className="firebase-status">
+              <Zap size={12} /> Push notifications active (works when app is closed)
+            </span>
+          )}
+          {!firebaseEnabled && (
+            <span className="firebase-status warning">
+              <AlertTriangle size={12} /> Local only - configure Firebase for background push
+            </span>
+          )}
         </div>
       </div>
     );

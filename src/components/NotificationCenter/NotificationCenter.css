@@ -106,6 +106,23 @@
   color: var(--text-secondary);
 }
 
+.firebase-status {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-top: 0.5rem;
+  font-size: 0.75rem;
+  padding: 0.25rem 0.5rem;
+  border-radius: 4px;
+  background: rgba(34, 197, 94, 0.1);
+  color: #22c55e;
+}
+
+.firebase-status.warning {
+  background: rgba(245, 158, 11, 0.1);
+  color: #f59e0b;
+}
+
 .enable-btn {
   display: flex;
   align-items: center;
