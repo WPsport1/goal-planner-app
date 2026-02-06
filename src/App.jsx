@@ -11,7 +11,7 @@ import Celebration from './components/Celebration/Celebration';
 import DailyReflection from './components/DailyReflection/DailyReflection';
 import WeeklySummary from './components/WeeklySummary/WeeklySummary';
 import Achievements from './components/Achievements/Achievements';
-import MorningRoutine from './components/MorningRoutine/MorningRoutine';
+import RoutineBuilder from './components/RoutineBuilder/RoutineBuilder';
 import Reminders from './components/Reminders/Reminders';
 import AuthPage from './components/Auth/AuthPage';
 import { Loader2 } from 'lucide-react';
@@ -44,7 +44,8 @@ function AppContent() {
       <DailyReflection />
       <WeeklySummary />
       <Achievements />
-      <MorningRoutine />
+      <RoutineBuilder type="morning" />
+      <RoutineBuilder type="nighttime" />
       <Reminders />
     </>
   );

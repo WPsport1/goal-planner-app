@@ -167,6 +167,18 @@
   box-shadow: 0 0 12px rgba(249, 115, 22, 0.3);
 }
 
+/* Nighttime Routine Button */
+.header-action-btn.night {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1) 0%, rgba(79, 70, 229, 0.1) 100%);
+  border-color: rgba(99, 102, 241, 0.3);
+  color: #6366f1;
+}
+
+.header-action-btn.night:hover {
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.2) 0%, rgba(79, 70, 229, 0.2) 100%);
+  box-shadow: 0 0 12px rgba(99, 102, 241, 0.3);
+}
+
 /* Reminders Button */
 .header-action-btn.reminders {
   background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(124, 58, 237, 0.1) 100%);

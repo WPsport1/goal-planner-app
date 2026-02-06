@@ -93,7 +93,14 @@ export function AppProvider({ children }) {
 
   // Morning routine state
   const [showMorningRoutine, setShowMorningRoutine] = useState(false);
-  const [morningRoutine, setMorningRoutine] = useState(null);
+  const [morningRoutine, setMorningRoutine] = useState(null); // Legacy - keeping for backwards compatibility
+
+  // Nighttime routine state
+  const [showNightRoutine, setShowNightRoutine] = useState(false);
+
+  // Unified routines state (supports 28 morning + 28 nighttime variations)
+  // Key format: "{type}_{day}_{week}" e.g. "morning_monday_A", "nighttime_friday_C"
+  const [routines, setRoutines] = useState({});
 
   // Reminders state
   const [showReminders, setShowReminders] = useState(false);
@@ -198,11 +205,19 @@ export function AppProvider({ children }) {
     }
   }, [reflections, isLoading]);
 
-  // Load morning routine from localStorage
+  // Load morning routine from localStorage (legacy support)
   useEffect(() => {
     const savedRoutine = localStorage.getItem('morningRoutine');
     if (savedRoutine) {
       setMorningRoutine(JSON.parse(savedRoutine));
+    }
+  }, []);
+
+  // Load all routines from localStorage (new unified system)
+  useEffect(() => {
+    const savedRoutines = localStorage.getItem('routines');
+    if (savedRoutines) {
+      setRoutines(JSON.parse(savedRoutines));
     }
   }, []);
 
@@ -660,10 +675,20 @@ export function AppProvider({ children }) {
   // Clear sync error
   const clearSyncError = () => setSyncError(null);
 
-  // Save morning routine
+  // Save morning routine (legacy)
   const saveMorningRoutine = (routine) => {
     setMorningRoutine(routine);
     localStorage.setItem('morningRoutine', JSON.stringify(routine));
+  };
+
+  // Save a single routine by key (new unified system)
+  // Key format: "{type}_{day}_{week}" e.g. "morning_monday_A"
+  const saveRoutine = (key, routine) => {
+    setRoutines((prev) => {
+      const updated = { ...prev, [key]: routine };
+      localStorage.setItem('routines', JSON.stringify(updated));
+      return updated;
+    });
   };
 
   // Save reminders settings
@@ -719,11 +744,19 @@ export function AppProvider({ children }) {
     showAchievements,
     setShowAchievements,
 
-    // Morning Routine
+    // Morning Routine (legacy + new)
     showMorningRoutine,
     setShowMorningRoutine,
     morningRoutine,
     saveMorningRoutine,
+
+    // Night Routine
+    showNightRoutine,
+    setShowNightRoutine,
+
+    // Unified Routines (28 morning + 28 nighttime variations)
+    routines,
+    saveRoutine,
 
     // Reminders
     showReminders,

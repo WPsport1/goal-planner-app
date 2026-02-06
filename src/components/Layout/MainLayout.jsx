@@ -23,6 +23,7 @@ import {
   BarChart3,
   Trophy,
   Sunrise,
+  Sunset,
   Bell,
 } from 'lucide-react';
 import './MainLayout.css';
@@ -40,6 +41,7 @@ export default function MainLayout({ leftPanel, rightPanel }) {
     setShowWeeklySummary,
     setShowAchievements,
     setShowMorningRoutine,
+    setShowNightRoutine,
     setShowReminders,
   } = useApp();
 
@@ -196,6 +198,15 @@ export default function MainLayout({ leftPanel, rightPanel }) {
             <Sunrise size={18} />
           </button>
 
+          {/* Nighttime Routine Button */}
+          <button
+            className="header-action-btn night"
+            onClick={() => setShowNightRoutine(true)}
+            title="Nighttime Routine"
+          >
+            <Sunset size={18} />
+          </button>
+
           {/* Reminders Button */}
           <button
             className="header-action-btn reminders"
@@ -272,6 +283,12 @@ export default function MainLayout({ leftPanel, rightPanel }) {
                 <button className="user-menu-item" onClick={() => { setShowMorningRoutine(true); setShowUserMenu(false); }}>
                   <Sunrise size={16} />
                   <span>Morning Routine</span>
+                </button>
+
+                {/* Nighttime Routine in Menu */}
+                <button className="user-menu-item" onClick={() => { setShowNightRoutine(true); setShowUserMenu(false); }}>
+                  <Sunset size={16} />
+                  <span>Nighttime Routine</span>
                 </button>
 
                 {/* Reminders in Menu */}
