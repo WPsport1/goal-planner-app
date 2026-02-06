@@ -116,7 +116,82 @@
   border-color: var(--border-secondary);
 }
 
-/* Reflection Button */
+/* Header Action Buttons */
+.header-action-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.header-action-btn:hover {
+  background: var(--bg-active);
+  color: var(--text-secondary);
+  transform: scale(1.05);
+}
+
+/* Weekly Summary Button */
+.header-action-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+}
+
+/* Achievements Button */
+.header-action-btn.achievements {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.1) 0%, rgba(217, 119, 6, 0.1) 100%);
+  border-color: rgba(245, 158, 11, 0.3);
+  color: #f59e0b;
+}
+
+.header-action-btn.achievements:hover {
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.2) 0%, rgba(217, 119, 6, 0.2) 100%);
+  box-shadow: 0 0 12px rgba(245, 158, 11, 0.3);
+}
+
+/* Morning Routine Button */
+.header-action-btn.morning {
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.1) 0%, rgba(234, 88, 12, 0.1) 100%);
+  border-color: rgba(249, 115, 22, 0.3);
+  color: #f97316;
+}
+
+.header-action-btn.morning:hover {
+  background: linear-gradient(135deg, rgba(249, 115, 22, 0.2) 0%, rgba(234, 88, 12, 0.2) 100%);
+  box-shadow: 0 0 12px rgba(249, 115, 22, 0.3);
+}
+
+/* Reminders Button */
+.header-action-btn.reminders {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.1) 0%, rgba(124, 58, 237, 0.1) 100%);
+  border-color: rgba(139, 92, 246, 0.3);
+  color: #8b5cf6;
+}
+
+.header-action-btn.reminders:hover {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(124, 58, 237, 0.2) 100%);
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.3);
+}
+
+/* Daily Reflection Button */
+.header-action-btn.reflection {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(236, 72, 153, 0.2) 100%);
+  border-color: rgba(139, 92, 246, 0.3);
+  color: #a78bfa;
+}
+
+.header-action-btn.reflection:hover {
+  background: linear-gradient(135deg, rgba(139, 92, 246, 0.3) 0%, rgba(236, 72, 153, 0.3) 100%);
+  box-shadow: 0 0 12px rgba(139, 92, 246, 0.4);
+}
+
+/* Legacy Reflection Button (for compatibility) */
 .reflection-btn {
   display: flex;
   align-items: center;

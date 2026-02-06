@@ -85,6 +85,20 @@ export function AppProvider({ children }) {
   // Daily reflection modal state
   const [showReflection, setShowReflection] = useState(false);
 
+  // Weekly summary modal state
+  const [showWeeklySummary, setShowWeeklySummary] = useState(false);
+
+  // Achievements modal state
+  const [showAchievements, setShowAchievements] = useState(false);
+
+  // Morning routine state
+  const [showMorningRoutine, setShowMorningRoutine] = useState(false);
+  const [morningRoutine, setMorningRoutine] = useState(null);
+
+  // Reminders state
+  const [showReminders, setShowReminders] = useState(false);
+  const [reminders, setReminders] = useState(null);
+
   // Load data on mount
   useEffect(() => {
     const loadData = async () => {
@@ -183,6 +197,22 @@ export function AppProvider({ children }) {
       localStorage.setItem('reflections', JSON.stringify(reflections));
     }
   }, [reflections, isLoading]);
+
+  // Load morning routine from localStorage
+  useEffect(() => {
+    const savedRoutine = localStorage.getItem('morningRoutine');
+    if (savedRoutine) {
+      setMorningRoutine(JSON.parse(savedRoutine));
+    }
+  }, []);
+
+  // Load reminders from localStorage
+  useEffect(() => {
+    const savedReminders = localStorage.getItem('reminders');
+    if (savedReminders) {
+      setReminders(JSON.parse(savedReminders));
+    }
+  }, []);
 
   // Check for evening reflection prompt (after 7 PM)
   useEffect(() => {
@@ -630,6 +660,18 @@ export function AppProvider({ children }) {
   // Clear sync error
   const clearSyncError = () => setSyncError(null);
 
+  // Save morning routine
+  const saveMorningRoutine = (routine) => {
+    setMorningRoutine(routine);
+    localStorage.setItem('morningRoutine', JSON.stringify(routine));
+  };
+
+  // Save reminders settings
+  const saveReminders = (reminderSettings) => {
+    setReminders(reminderSettings);
+    localStorage.setItem('reminders', JSON.stringify(reminderSettings));
+  };
+
   const value = {
     // State
     goals,
@@ -668,6 +710,26 @@ export function AppProvider({ children }) {
     updateReflection,
     showReflection,
     setShowReflection,
+
+    // Weekly Summary
+    showWeeklySummary,
+    setShowWeeklySummary,
+
+    // Achievements
+    showAchievements,
+    setShowAchievements,
+
+    // Morning Routine
+    showMorningRoutine,
+    setShowMorningRoutine,
+    morningRoutine,
+    saveMorningRoutine,
+
+    // Reminders
+    showReminders,
+    setShowReminders,
+    reminders,
+    saveReminders,
 
     // Celebration
     celebration,

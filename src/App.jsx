@@ -9,6 +9,10 @@ import ShortTermCalendar from './components/Calendar/ShortTermCalendar';
 import DetailModal from './components/DetailModal/DetailModal';
 import Celebration from './components/Celebration/Celebration';
 import DailyReflection from './components/DailyReflection/DailyReflection';
+import WeeklySummary from './components/WeeklySummary/WeeklySummary';
+import Achievements from './components/Achievements/Achievements';
+import MorningRoutine from './components/MorningRoutine/MorningRoutine';
+import Reminders from './components/Reminders/Reminders';
 import AuthPage from './components/Auth/AuthPage';
 import { Loader2 } from 'lucide-react';
 import './App.css';
@@ -38,6 +42,10 @@ function AppContent() {
       <DetailModal />
       <Celebration />
       <DailyReflection />
+      <WeeklySummary />
+      <Achievements />
+      <MorningRoutine />
+      <Reminders />
     </>
   );
 }

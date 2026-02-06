@@ -20,6 +20,10 @@ import {
   Calendar,
   BookOpen,
   Sparkles,
+  BarChart3,
+  Trophy,
+  Sunrise,
+  Bell,
 } from 'lucide-react';
 import './MainLayout.css';
 
@@ -33,6 +37,10 @@ export default function MainLayout({ leftPanel, rightPanel }) {
     toggleRightFullscreen,
     exitFullscreen,
     setShowReflection,
+    setShowWeeklySummary,
+    setShowAchievements,
+    setShowMorningRoutine,
+    setShowReminders,
   } = useApp();
 
   const { user, signOut, isConfigured } = useAuth();
@@ -161,9 +169,45 @@ export default function MainLayout({ leftPanel, rightPanel }) {
             </button>
           )}
 
+          {/* Weekly Summary Button */}
+          <button
+            className="header-action-btn"
+            onClick={() => setShowWeeklySummary(true)}
+            title="Weekly Summary"
+          >
+            <BarChart3 size={18} />
+          </button>
+
+          {/* Achievements Button */}
+          <button
+            className="header-action-btn achievements"
+            onClick={() => setShowAchievements(true)}
+            title="Achievements"
+          >
+            <Trophy size={18} />
+          </button>
+
+          {/* Morning Routine Button */}
+          <button
+            className="header-action-btn morning"
+            onClick={() => setShowMorningRoutine(true)}
+            title="Morning Routine"
+          >
+            <Sunrise size={18} />
+          </button>
+
+          {/* Reminders Button */}
+          <button
+            className="header-action-btn reminders"
+            onClick={() => setShowReminders(true)}
+            title="Reminders"
+          >
+            <Bell size={18} />
+          </button>
+
           {/* Daily Reflection Button */}
           <button
-            className="reflection-btn"
+            className="header-action-btn reflection"
             onClick={() => setShowReflection(true)}
             title="Daily Reflection"
           >
@@ -212,11 +256,37 @@ export default function MainLayout({ leftPanel, rightPanel }) {
 
                 <div className="user-menu-divider" />
 
+                {/* Weekly Summary in Menu */}
+                <button className="user-menu-item" onClick={() => { setShowWeeklySummary(true); setShowUserMenu(false); }}>
+                  <BarChart3 size={16} />
+                  <span>Weekly Summary</span>
+                </button>
+
+                {/* Achievements in Menu */}
+                <button className="user-menu-item" onClick={() => { setShowAchievements(true); setShowUserMenu(false); }}>
+                  <Trophy size={16} />
+                  <span>Achievements</span>
+                </button>
+
+                {/* Morning Routine in Menu */}
+                <button className="user-menu-item" onClick={() => { setShowMorningRoutine(true); setShowUserMenu(false); }}>
+                  <Sunrise size={16} />
+                  <span>Morning Routine</span>
+                </button>
+
+                {/* Reminders in Menu */}
+                <button className="user-menu-item" onClick={() => { setShowReminders(true); setShowUserMenu(false); }}>
+                  <Bell size={16} />
+                  <span>Reminders</span>
+                </button>
+
                 {/* Daily Reflection in Menu */}
                 <button className="user-menu-item" onClick={() => { setShowReflection(true); setShowUserMenu(false); }}>
                   <BookOpen size={16} />
                   <span>Daily Reflection</span>
                 </button>
+
+                <div className="user-menu-divider" />
 
                 {/* Theme Toggle in Menu */}
                 <button className="user-menu-item" onClick={toggleTheme}>
