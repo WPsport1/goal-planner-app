@@ -1,7 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from './AuthContext';
-import { goalService, taskService, isSupabaseConfigured } from '../services/supabase';
+import { goalService, taskService, reflectionService, isSupabaseConfigured } from '../services/supabase';
 import { isToday, parseISO, startOfDay, subDays, isSameDay } from 'date-fns';
 
 const AppContext = createContext();
@@ -95,13 +95,18 @@ export function AppProvider({ children }) {
         // If using cloud sync with authenticated user
         if (isConfigured && user) {
           // Load from Supabase
-          const [goalsResult, tasksResult] = await Promise.all([
+          const [goalsResult, tasksResult, reflectionsResult] = await Promise.all([
             goalService.getAll(user.id),
             taskService.getAll(user.id),
+            reflectionService.getAll(user.id),
           ]);
 
           if (goalsResult.error) throw new Error(goalsResult.error);
           if (tasksResult.error) throw new Error(tasksResult.error);
+          // Don't throw on reflection error - table might not exist yet
+          if (reflectionsResult.error) {
+            console.warn('Reflections not loaded:', reflectionsResult.error);
+          }
 
           // If user has no data, create sample data
           if (goalsResult.data.length === 0 && tasksResult.data.length === 0) {
@@ -113,6 +118,10 @@ export function AppProvider({ children }) {
             // Transform from database format to app format
             setGoals(goalsResult.data.map(transformGoalFromDB));
             setTasks(tasksResult.data.map(transformTaskFromDB));
+            // Load reflections if available
+            if (reflectionsResult.data) {
+              setReflections(reflectionsResult.data.map(transformReflectionFromDB));
+            }
           }
         } else {
           // Load from localStorage (local-only mode)
@@ -258,6 +267,29 @@ export function AppProvider({ children }) {
     linkedGoalId: dbTask.linked_goal_id,
     createdAt: dbTask.created_at,
     dataPoints: dbTask.data_points || [],
+  });
+
+  // Reflection transform functions
+  const transformReflectionToDB = (reflection) => ({
+    date: reflection.date,
+    mood: reflection.mood,
+    rating: reflection.rating,
+    gratitude: reflection.gratitude,
+    wins: reflection.wins,
+    improvements: reflection.improvements,
+    tomorrow_focus: reflection.tomorrowFocus,
+  });
+
+  const transformReflectionFromDB = (dbReflection) => ({
+    id: dbReflection.id,
+    date: dbReflection.date,
+    mood: dbReflection.mood,
+    rating: dbReflection.rating,
+    gratitude: dbReflection.gratitude,
+    wins: dbReflection.wins,
+    improvements: dbReflection.improvements,
+    tomorrowFocus: dbReflection.tomorrow_focus,
+    createdAt: dbReflection.created_at,
   });
 
   // Calculate habit streak
@@ -513,21 +545,59 @@ export function AppProvider({ children }) {
   };
 
   // Reflection CRUD operations
-  const addReflection = (reflection) => {
+  const addReflection = async (reflection) => {
     const newReflection = {
       id: uuidv4(),
       ...reflection,
       date: new Date().toISOString(),
     };
+
+    // Optimistic update
     setReflections((prev) => [...prev, newReflection]);
     triggerCelebration('milestone', { message: 'Reflection saved! Great job taking time to reflect.' });
+
+    // Sync to cloud if available
+    if (isConfigured && user) {
+      try {
+        setIsSyncing(true);
+        const result = await reflectionService.create(transformReflectionToDB(newReflection), user.id);
+        if (result.error) throw new Error(result.error);
+        // Update with cloud-generated ID if different
+        if (result.data && result.data.id !== newReflection.id) {
+          setReflections((prev) =>
+            prev.map((r) => (r.id === newReflection.id ? { ...r, id: result.data.id } : r))
+          );
+        }
+      } catch (err) {
+        console.error('Error syncing reflection:', err);
+        setSyncError(err.message);
+      } finally {
+        setIsSyncing(false);
+      }
+    }
+
     return newReflection;
   };
 
-  const updateReflection = (id, updates) => {
+  const updateReflection = async (id, updates) => {
+    // Optimistic update
     setReflections((prev) =>
       prev.map((r) => (r.id === id ? { ...r, ...updates } : r))
     );
+
+    // Sync to cloud if available
+    if (isConfigured && user) {
+      try {
+        setIsSyncing(true);
+        const result = await reflectionService.update(id, transformReflectionToDB(updates));
+        if (result.error) throw new Error(result.error);
+      } catch (err) {
+        console.error('Error syncing reflection update:', err);
+        setSyncError(err.message);
+      } finally {
+        setIsSyncing(false);
+      }
+    }
   };
 
   // Modal controls

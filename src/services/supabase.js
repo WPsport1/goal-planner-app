@@ -221,6 +221,77 @@ export const taskService = {
 };
 
 // ============================================
+// REFLECTION OPERATIONS
+// ============================================
+
+export const reflectionService = {
+  async getAll(userId) {
+    if (!supabase) return { data: null, error: 'Supabase not configured' };
+
+    const { data, error } = await supabase
+      .from('reflections')
+      .select('*')
+      .eq('user_id', userId)
+      .order('date', { ascending: false });
+
+    return { data, error };
+  },
+
+  async create(reflection, userId) {
+    if (!supabase) return { data: null, error: 'Supabase not configured' };
+
+    const { data, error } = await supabase
+      .from('reflections')
+      .insert({
+        user_id: userId,
+        date: reflection.date,
+        mood: reflection.mood,
+        rating: reflection.rating,
+        gratitude: reflection.gratitude,
+        wins: reflection.wins,
+        improvements: reflection.improvements,
+        tomorrow_focus: reflection.tomorrowFocus,
+      })
+      .select()
+      .single();
+
+    return { data, error };
+  },
+
+  async update(id, updates) {
+    if (!supabase) return { data: null, error: 'Supabase not configured' };
+
+    const { data, error } = await supabase
+      .from('reflections')
+      .update({
+        mood: updates.mood,
+        rating: updates.rating,
+        gratitude: updates.gratitude,
+        wins: updates.wins,
+        improvements: updates.improvements,
+        tomorrow_focus: updates.tomorrowFocus,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+      .select()
+      .single();
+
+    return { data, error };
+  },
+
+  async delete(id) {
+    if (!supabase) return { data: null, error: 'Supabase not configured' };
+
+    const { error } = await supabase
+      .from('reflections')
+      .delete()
+      .eq('id', id);
+
+    return { error };
+  },
+};
+
+// ============================================
 // AUTH OPERATIONS
 // ============================================
 
