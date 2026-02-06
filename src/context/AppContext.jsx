@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from './AuthContext';
 import { goalService, taskService, isSupabaseConfigured } from '../services/supabase';
+import { isToday, parseISO, startOfDay, subDays, isSameDay } from 'date-fns';
 
 const AppContext = createContext();
 
@@ -51,6 +52,7 @@ const createSampleData = () => ({
       dataPoints: [],
     },
   ],
+  reflections: [],
 });
 
 export function AppProvider({ children }) {
@@ -67,12 +69,21 @@ export function AppProvider({ children }) {
   // State for tasks/appointments/habits (short-term)
   const [tasks, setTasks] = useState([]);
 
+  // State for daily reflections
+  const [reflections, setReflections] = useState([]);
+
   // Current view state
   const [activeTab, setActiveTab] = useState('goals'); // 'goals' or 'planner'
   const [selectedItem, setSelectedItem] = useState(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [leftPanelFullscreen, setLeftPanelFullscreen] = useState(false);
   const [rightPanelFullscreen, setRightPanelFullscreen] = useState(false);
+
+  // Celebration state
+  const [celebration, setCelebration] = useState(null);
+
+  // Daily reflection modal state
+  const [showReflection, setShowReflection] = useState(false);
 
   // Load data on mount
   useEffect(() => {
@@ -97,6 +108,7 @@ export function AppProvider({ children }) {
             const sample = createSampleData();
             setGoals(sample.goals);
             setTasks(sample.tasks);
+            setReflections(sample.reflections);
           } else {
             // Transform from database format to app format
             setGoals(goalsResult.data.map(transformGoalFromDB));
@@ -106,6 +118,7 @@ export function AppProvider({ children }) {
           // Load from localStorage (local-only mode)
           const savedGoals = localStorage.getItem('goals');
           const savedTasks = localStorage.getItem('tasks');
+          const savedReflections = localStorage.getItem('reflections');
 
           if (savedGoals) {
             setGoals(JSON.parse(savedGoals));
@@ -120,6 +133,10 @@ export function AppProvider({ children }) {
             const sample = createSampleData();
             setTasks(sample.tasks);
           }
+
+          if (savedReflections) {
+            setReflections(JSON.parse(savedReflections));
+          }
         }
       } catch (err) {
         console.error('Error loading data:', err);
@@ -127,8 +144,10 @@ export function AppProvider({ children }) {
         // Fall back to localStorage
         const savedGoals = localStorage.getItem('goals');
         const savedTasks = localStorage.getItem('tasks');
+        const savedReflections = localStorage.getItem('reflections');
         if (savedGoals) setGoals(JSON.parse(savedGoals));
         if (savedTasks) setTasks(JSON.parse(savedTasks));
+        if (savedReflections) setReflections(JSON.parse(savedReflections));
       } finally {
         setIsLoading(false);
       }
@@ -149,6 +168,34 @@ export function AppProvider({ children }) {
       localStorage.setItem('tasks', JSON.stringify(tasks));
     }
   }, [tasks, isLoading]);
+
+  useEffect(() => {
+    if (!isLoading) {
+      localStorage.setItem('reflections', JSON.stringify(reflections));
+    }
+  }, [reflections, isLoading]);
+
+  // Check for evening reflection prompt (after 7 PM)
+  useEffect(() => {
+    const checkReflectionTime = () => {
+      const now = new Date();
+      const hour = now.getHours();
+      const todayReflection = reflections.find((r) => isToday(parseISO(r.date)));
+
+      // Show prompt between 7 PM and 10 PM if no reflection today
+      if (hour >= 19 && hour < 22 && !todayReflection && !isLoading) {
+        const lastPromptDismissed = localStorage.getItem('reflectionPromptDismissed');
+        if (lastPromptDismissed !== new Date().toDateString()) {
+          // Could auto-show here, but we'll let user trigger it
+        }
+      }
+    };
+
+    const timer = setInterval(checkReflectionTime, 60000); // Check every minute
+    checkReflectionTime();
+
+    return () => clearInterval(timer);
+  }, [reflections, isLoading]);
 
   // Transform functions for database
   const transformGoalToDB = (goal) => ({
@@ -213,6 +260,45 @@ export function AppProvider({ children }) {
     dataPoints: dbTask.data_points || [],
   });
 
+  // Calculate habit streak
+  const calculateHabitStreak = useCallback((habitTitle) => {
+    const habitCompletions = tasks
+      .filter((t) => t.title === habitTitle && t.type === 'habit' && t.completed)
+      .map((t) => startOfDay(parseISO(t.scheduledDate || t.createdAt)))
+      .sort((a, b) => b - a);
+
+    if (habitCompletions.length === 0) return 0;
+
+    let streak = 0;
+    let checkDate = startOfDay(new Date());
+    const todayCompleted = habitCompletions.some((d) => isSameDay(d, checkDate));
+
+    if (!todayCompleted) {
+      checkDate = subDays(checkDate, 1);
+    }
+
+    for (let i = 0; i < 365; i++) {
+      const hasCompletion = habitCompletions.some((d) => isSameDay(d, checkDate));
+      if (hasCompletion) {
+        streak++;
+        checkDate = subDays(checkDate, 1);
+      } else {
+        break;
+      }
+    }
+
+    return streak;
+  }, [tasks]);
+
+  // Trigger celebration
+  const triggerCelebration = useCallback((type, data = {}) => {
+    setCelebration({ type, ...data });
+  }, []);
+
+  const clearCelebration = useCallback(() => {
+    setCelebration(null);
+  }, []);
+
   // Goal CRUD operations
   const addGoal = async (goal) => {
     const newGoal = {
@@ -245,10 +331,26 @@ export function AppProvider({ children }) {
   };
 
   const updateGoal = async (id, updates) => {
+    const oldGoal = goals.find((g) => g.id === id);
+
     // Optimistic update
     setGoals((prev) =>
       prev.map((goal) => (goal.id === id ? { ...goal, ...updates } : goal))
     );
+
+    // Check for goal completion celebration
+    if (updates.status === 'completed' && oldGoal?.status !== 'completed') {
+      triggerCelebration('goal_complete', { message: `You completed: ${oldGoal?.title}!` });
+    }
+
+    // Check for milestone completion
+    if (updates.milestones && oldGoal?.milestones) {
+      const oldCompleted = oldGoal.milestones.filter((m) => m.completed).length;
+      const newCompleted = updates.milestones.filter((m) => m.completed).length;
+      if (newCompleted > oldCompleted) {
+        triggerCelebration('milestone', { message: 'Milestone achieved!' });
+      }
+    }
 
     // Sync to cloud
     if (isConfigured && user) {
@@ -371,6 +473,26 @@ export function AppProvider({ children }) {
       )
     );
 
+    // Trigger celebrations
+    if (newCompleted) {
+      if (task.type === 'habit') {
+        // Calculate streak after completion
+        setTimeout(() => {
+          const streak = calculateHabitStreak(task.title);
+          if (streak > 0 && (streak === 7 || streak === 14 || streak === 30 || streak === 100 || streak % 50 === 0)) {
+            triggerCelebration('streak', { streak, message: `Amazing! ${streak} day streak on "${task.title}"!` });
+          } else if (streak === 1) {
+            triggerCelebration('habit_complete', { message: 'Great start! Day 1 complete!' });
+          } else {
+            triggerCelebration('habit_complete', { streak, message: `${streak} day streak! Keep going!` });
+          }
+        }, 100);
+      } else {
+        // Regular task completion - show subtle celebration
+        triggerCelebration('task_complete', { message: task.title });
+      }
+    }
+
     // Sync to cloud
     if (isConfigured && user) {
       try {
@@ -388,6 +510,24 @@ export function AppProvider({ children }) {
 
   const reorderTasks = (newOrder) => {
     setTasks(newOrder);
+  };
+
+  // Reflection CRUD operations
+  const addReflection = (reflection) => {
+    const newReflection = {
+      id: uuidv4(),
+      ...reflection,
+      date: new Date().toISOString(),
+    };
+    setReflections((prev) => [...prev, newReflection]);
+    triggerCelebration('milestone', { message: 'Reflection saved! Great job taking time to reflect.' });
+    return newReflection;
+  };
+
+  const updateReflection = (id, updates) => {
+    setReflections((prev) =>
+      prev.map((r) => (r.id === id ? { ...r, ...updates } : r))
+    );
   };
 
   // Modal controls
@@ -424,6 +564,7 @@ export function AppProvider({ children }) {
     // State
     goals,
     tasks,
+    reflections,
     activeTab,
     selectedItem,
     isDetailModalOpen,
@@ -451,6 +592,20 @@ export function AppProvider({ children }) {
     deleteTask,
     toggleTaskComplete,
     reorderTasks,
+
+    // Reflection operations
+    addReflection,
+    updateReflection,
+    showReflection,
+    setShowReflection,
+
+    // Celebration
+    celebration,
+    triggerCelebration,
+    clearCelebration,
+
+    // Streak calculation
+    calculateHabitStreak,
 
     // Modal operations
     openDetail,

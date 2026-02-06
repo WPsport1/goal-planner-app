@@ -18,6 +18,8 @@ import {
   Moon,
   List,
   Calendar,
+  BookOpen,
+  Sparkles,
 } from 'lucide-react';
 import './MainLayout.css';
 
@@ -30,6 +32,7 @@ export default function MainLayout({ leftPanel, rightPanel }) {
     toggleLeftFullscreen,
     toggleRightFullscreen,
     exitFullscreen,
+    setShowReflection,
   } = useApp();
 
   const { user, signOut, isConfigured } = useAuth();
@@ -158,6 +161,15 @@ export default function MainLayout({ leftPanel, rightPanel }) {
             </button>
           )}
 
+          {/* Daily Reflection Button */}
+          <button
+            className="reflection-btn"
+            onClick={() => setShowReflection(true)}
+            title="Daily Reflection"
+          >
+            <Sparkles size={18} />
+          </button>
+
           {/* Theme Toggle */}
           <button
             className="theme-toggle"
@@ -199,6 +211,12 @@ export default function MainLayout({ leftPanel, rightPanel }) {
                 </div>
 
                 <div className="user-menu-divider" />
+
+                {/* Daily Reflection in Menu */}
+                <button className="user-menu-item" onClick={() => { setShowReflection(true); setShowUserMenu(false); }}>
+                  <BookOpen size={16} />
+                  <span>Daily Reflection</span>
+                </button>
 
                 {/* Theme Toggle in Menu */}
                 <button className="user-menu-item" onClick={toggleTheme}>

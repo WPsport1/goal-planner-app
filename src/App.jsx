@@ -7,6 +7,8 @@ import TaskList from './components/Planner/TaskList';
 import LongTermCalendar from './components/Calendar/LongTermCalendar';
 import ShortTermCalendar from './components/Calendar/ShortTermCalendar';
 import DetailModal from './components/DetailModal/DetailModal';
+import Celebration from './components/Celebration/Celebration';
+import DailyReflection from './components/DailyReflection/DailyReflection';
 import AuthPage from './components/Auth/AuthPage';
 import { Loader2 } from 'lucide-react';
 import './App.css';
@@ -34,6 +36,8 @@ function AppContent() {
         }
       />
       <DetailModal />
+      <Celebration />
+      <DailyReflection />
     </>
   );
 }
