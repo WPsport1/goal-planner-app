@@ -13,6 +13,7 @@ import WeeklySummary from './components/WeeklySummary/WeeklySummary';
 import Achievements from './components/Achievements/Achievements';
 import RoutineBuilder from './components/RoutineBuilder/RoutineBuilder';
 import Reminders from './components/Reminders/Reminders';
+import NotificationCenter from './components/NotificationCenter/NotificationCenter';
 import AuthPage from './components/Auth/AuthPage';
 import { Loader2 } from 'lucide-react';
 import './App.css';
@@ -47,6 +48,7 @@ function AppContent() {
       <RoutineBuilder type="morning" />
       <RoutineBuilder type="nighttime" />
       <Reminders />
+      <NotificationCenter />
     </>
   );
 }

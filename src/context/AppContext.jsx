@@ -102,9 +102,13 @@ export function AppProvider({ children }) {
   // Key format: "{type}_{day}_{week}" e.g. "morning_monday_A", "nighttime_friday_C"
   const [routines, setRoutines] = useState({});
 
-  // Reminders state
+  // Reminders state (legacy)
   const [showReminders, setShowReminders] = useState(false);
   const [reminders, setReminders] = useState(null);
+
+  // Notification Center state
+  const [showNotificationCenter, setShowNotificationCenter] = useState(false);
+  const [notificationSettings, setNotificationSettings] = useState(null);
 
   // Load data on mount
   useEffect(() => {
@@ -226,6 +230,14 @@ export function AppProvider({ children }) {
     const savedReminders = localStorage.getItem('reminders');
     if (savedReminders) {
       setReminders(JSON.parse(savedReminders));
+    }
+  }, []);
+
+  // Load notification settings from localStorage
+  useEffect(() => {
+    const savedNotificationSettings = localStorage.getItem('notificationSettings');
+    if (savedNotificationSettings) {
+      setNotificationSettings(JSON.parse(savedNotificationSettings));
     }
   }, []);
 
@@ -697,6 +709,12 @@ export function AppProvider({ children }) {
     localStorage.setItem('reminders', JSON.stringify(reminderSettings));
   };
 
+  // Save notification settings
+  const saveNotificationSettings = (settings) => {
+    setNotificationSettings(settings);
+    localStorage.setItem('notificationSettings', JSON.stringify(settings));
+  };
+
   const value = {
     // State
     goals,
@@ -758,11 +776,17 @@ export function AppProvider({ children }) {
     routines,
     saveRoutine,
 
-    // Reminders
+    // Reminders (legacy)
     showReminders,
     setShowReminders,
     reminders,
     saveReminders,
+
+    // Notification Center
+    showNotificationCenter,
+    setShowNotificationCenter,
+    notificationSettings,
+    saveNotificationSettings,
 
     // Celebration
     celebration,

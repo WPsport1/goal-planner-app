@@ -1,0 +1,721 @@
+import { useState, useEffect } from 'react';
+import { useApp } from '../../context/AppContext';
+import {
+  X,
+  Bell,
+  BellOff,
+  BellRing,
+  Clock,
+  Volume2,
+  VolumeX,
+  Vibrate,
+  Smartphone,
+  Monitor,
+  Check,
+  AlertTriangle,
+  Settings,
+  TestTube,
+  Trash2,
+  Plus,
+  Sun,
+  Moon,
+  Sparkles,
+  Repeat,
+  Calendar,
+  ChevronRight,
+  Shield,
+  Zap,
+} from 'lucide-react';
+import {
+  isNotificationSupported,
+  getPermissionStatus,
+  requestPermission,
+  initializeNotifications,
+  showLocalNotification,
+  playNotificationSound,
+  getScheduledNotifications,
+  clearScheduledNotifications,
+  createMorningRoutineReminder,
+  createNightRoutineReminder,
+  createReflectionReminder,
+} from '../../services/notifications';
+import './NotificationCenter.css';
+
+export default function NotificationCenter() {
+  const {
+    showNotificationCenter,
+    setShowNotificationCenter,
+    notificationSettings,
+    saveNotificationSettings,
+    tasks,
+  } = useApp();
+
+  const [permissionStatus, setPermissionStatus] = useState('default');
+  const [isSupported, setIsSupported] = useState(true);
+  const [activeTab, setActiveTab] = useState('settings');
+  const [testingSound, setTestingSound] = useState(false);
+
+  // Default settings
+  const [settings, setSettings] = useState({
+    enabled: true,
+    sound: true,
+    soundVolume: 70,
+    soundType: 'default',
+    vibrate: true,
+    vibrationPattern: 'default',
+    persistentAlerts: true,
+    snoozeEnabled: true,
+    snoozeDuration: 10, // minutes
+
+    // Task reminders
+    taskReminders: true,
+    taskReminderMinutes: 15,
+
+    // Habit reminders
+    habitReminders: true,
+    habitReminderTime: '08:00',
+
+    // Routine reminders
+    morningRoutineReminder: true,
+    morningRoutineTime: '06:30',
+    nightRoutineReminder: true,
+    nightRoutineTime: '21:00',
+
+    // Reflection reminders
+    reflectionReminder: true,
+    reflectionReminderTime: '20:00',
+
+    // Streak protection
+    streakProtection: true,
+    streakProtectionTime: '20:00',
+
+    // Quiet hours
+    quietHoursEnabled: false,
+    quietHoursStart: '22:00',
+    quietHoursEnd: '07:00',
+
+    // Escalation
+    escalationEnabled: true,
+    escalationAfterMinutes: 5,
+    escalationSound: 'urgent',
+  });
+
+  // Load saved settings
+  useEffect(() => {
+    if (notificationSettings) {
+      setSettings({ ...settings, ...notificationSettings });
+    }
+  }, [notificationSettings]);
+
+  // Check support and permission on mount
+  useEffect(() => {
+    setIsSupported(isNotificationSupported());
+    setPermissionStatus(getPermissionStatus());
+  }, []);
+
+  // Get scheduled notifications
+  const scheduledNotifications = getScheduledNotifications();
+
+  if (!showNotificationCenter) return null;
+
+  const handleClose = () => {
+    setShowNotificationCenter(false);
+  };
+
+  const handleRequestPermission = async () => {
+    const result = await requestPermission();
+    setPermissionStatus(result.permission || getPermissionStatus());
+
+    if (result.success) {
+      // Initialize the notification system
+      await initializeNotifications();
+    }
+  };
+
+  const handleSaveSettings = () => {
+    saveNotificationSettings(settings);
+
+    // Set up scheduled notifications based on settings
+    if (settings.enabled && permissionStatus === 'granted') {
+      clearScheduledNotifications(); // Clear existing
+
+      if (settings.morningRoutineReminder) {
+        createMorningRoutineReminder(settings.morningRoutineTime);
+      }
+
+      if (settings.nightRoutineReminder) {
+        createNightRoutineReminder(settings.nightRoutineTime);
+      }
+
+      if (settings.reflectionReminder) {
+        createReflectionReminder(settings.reflectionReminderTime);
+      }
+    }
+
+    handleClose();
+  };
+
+  const handleTestNotification = () => {
+    showLocalNotification('🧪 Test Notification', {
+      body: 'This is how your notifications will look and sound!',
+      requireInteraction: settings.persistentAlerts,
+    });
+
+    if (settings.sound) {
+      setTestingSound(true);
+      playNotificationSound(settings.soundType);
+      setTimeout(() => setTestingSound(false), 2000);
+    }
+  };
+
+  const updateSetting = (key, value) => {
+    setSettings((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const renderPermissionSection = () => {
+    if (!isSupported) {
+      return (
+        <div className="permission-banner error">
+          <AlertTriangle size={24} />
+          <div>
+            <h4>Notifications Not Supported</h4>
+            <p>Your browser or device doesn't support push notifications. Try using Chrome, Firefox, or Edge on desktop, or install the app on your phone.</p>
+          </div>
+        </div>
+      );
+    }
+
+    if (permissionStatus === 'denied') {
+      return (
+        <div className="permission-banner error">
+          <BellOff size={24} />
+          <div>
+            <h4>Notifications Blocked</h4>
+            <p>You've blocked notifications. To enable them, click the lock icon in your browser's address bar and change the notification setting.</p>
+          </div>
+        </div>
+      );
+    }
+
+    if (permissionStatus === 'default') {
+      return (
+        <div className="permission-banner warning">
+          <Bell size={24} />
+          <div>
+            <h4>Enable Notifications</h4>
+            <p>Allow notifications to receive reminders for tasks, habits, and routines - even when the app is closed.</p>
+          </div>
+          <button className="enable-btn" onClick={handleRequestPermission}>
+            <BellRing size={18} />
+            Enable Now
+          </button>
+        </div>
+      );
+    }
+
+    return (
+      <div className="permission-banner success">
+        <Check size={24} />
+        <div>
+          <h4>Notifications Enabled</h4>
+          <p>You'll receive alerts for your tasks, habits, and routines.</p>
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <div className="notification-center-overlay" onClick={handleClose}>
+      <div className="notification-center-modal" onClick={(e) => e.stopPropagation()}>
+        {/* Header */}
+        <div className="nc-header">
+          <div className="header-title">
+            <BellRing size={24} />
+            <h2>Notification Center</h2>
+          </div>
+          <button className="close-btn" onClick={handleClose}>
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Permission Status */}
+        {renderPermissionSection()}
+
+        {/* Tabs */}
+        <div className="nc-tabs">
+          <button
+            className={`tab-btn ${activeTab === 'settings' ? 'active' : ''}`}
+            onClick={() => setActiveTab('settings')}
+          >
+            <Settings size={16} />
+            Settings
+          </button>
+          <button
+            className={`tab-btn ${activeTab === 'schedule' ? 'active' : ''}`}
+            onClick={() => setActiveTab('schedule')}
+          >
+            <Calendar size={16} />
+            Scheduled
+          </button>
+        </div>
+
+        {/* Content */}
+        <div className="nc-content">
+          {activeTab === 'settings' && (
+            <div className="settings-content">
+              {/* Master Toggle */}
+              <div className="setting-section">
+                <div className="setting-row master">
+                  <div className="setting-info">
+                    <Bell size={20} />
+                    <div>
+                      <h4>All Notifications</h4>
+                      <p>Master toggle for all alerts</p>
+                    </div>
+                  </div>
+                  <button
+                    className={`toggle-switch ${settings.enabled ? 'on' : 'off'}`}
+                    onClick={() => updateSetting('enabled', !settings.enabled)}
+                  >
+                    <span className="toggle-slider" />
+                  </button>
+                </div>
+              </div>
+
+              {settings.enabled && (
+                <>
+                  {/* Sound & Vibration */}
+                  <div className="setting-section">
+                    <h3>
+                      <Volume2 size={18} />
+                      Sound & Vibration
+                    </h3>
+
+                    <div className="setting-row">
+                      <div className="setting-info">
+                        <span>Sound Alerts</span>
+                      </div>
+                      <button
+                        className={`toggle-switch small ${settings.sound ? 'on' : 'off'}`}
+                        onClick={() => updateSetting('sound', !settings.sound)}
+                      >
+                        <span className="toggle-slider" />
+                      </button>
+                    </div>
+
+                    {settings.sound && (
+                      <>
+                        <div className="setting-row">
+                          <div className="setting-info">
+                            <span>Sound Type</span>
+                          </div>
+                          <select
+                            value={settings.soundType}
+                            onChange={(e) => updateSetting('soundType', e.target.value)}
+                          >
+                            <option value="default">Default</option>
+                            <option value="gentle">Gentle</option>
+                            <option value="alarm">Alarm</option>
+                            <option value="urgent">Urgent</option>
+                          </select>
+                        </div>
+
+                        <div className="setting-row">
+                          <div className="setting-info">
+                            <span>Volume</span>
+                          </div>
+                          <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            value={settings.soundVolume}
+                            onChange={(e) => updateSetting('soundVolume', parseInt(e.target.value))}
+                          />
+                          <span className="range-value">{settings.soundVolume}%</span>
+                        </div>
+                      </>
+                    )}
+
+                    <div className="setting-row">
+                      <div className="setting-info">
+                        <span>Vibration</span>
+                      </div>
+                      <button
+                        className={`toggle-switch small ${settings.vibrate ? 'on' : 'off'}`}
+                        onClick={() => updateSetting('vibrate', !settings.vibrate)}
+                      >
+                        <span className="toggle-slider" />
+                      </button>
+                    </div>
+
+                    <div className="setting-row">
+                      <div className="setting-info">
+                        <span>Persistent Alerts</span>
+                        <small>Stay visible until dismissed</small>
+                      </div>
+                      <button
+                        className={`toggle-switch small ${settings.persistentAlerts ? 'on' : 'off'}`}
+                        onClick={() => updateSetting('persistentAlerts', !settings.persistentAlerts)}
+                      >
+                        <span className="toggle-slider" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Snooze Settings */}
+                  <div className="setting-section">
+                    <h3>
+                      <Clock size={18} />
+                      Snooze Options
+                    </h3>
+
+                    <div className="setting-row">
+                      <div className="setting-info">
+                        <span>Enable Snooze</span>
+                      </div>
+                      <button
+                        className={`toggle-switch small ${settings.snoozeEnabled ? 'on' : 'off'}`}
+                        onClick={() => updateSetting('snoozeEnabled', !settings.snoozeEnabled)}
+                      >
+                        <span className="toggle-slider" />
+                      </button>
+                    </div>
+
+                    {settings.snoozeEnabled && (
+                      <div className="setting-row">
+                        <div className="setting-info">
+                          <span>Snooze Duration</span>
+                        </div>
+                        <select
+                          value={settings.snoozeDuration}
+                          onChange={(e) => updateSetting('snoozeDuration', parseInt(e.target.value))}
+                        >
+                          <option value={5}>5 minutes</option>
+                          <option value={10}>10 minutes</option>
+                          <option value={15}>15 minutes</option>
+                          <option value={30}>30 minutes</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Escalation */}
+                  <div className="setting-section">
+                    <h3>
+                      <Zap size={18} />
+                      Escalation (Can't-Miss Mode)
+                    </h3>
+
+                    <div className="setting-row">
+                      <div className="setting-info">
+                        <span>Escalate if not acknowledged</span>
+                        <small>Louder alerts if you don't respond</small>
+                      </div>
+                      <button
+                        className={`toggle-switch small ${settings.escalationEnabled ? 'on' : 'off'}`}
+                        onClick={() => updateSetting('escalationEnabled', !settings.escalationEnabled)}
+                      >
+                        <span className="toggle-slider" />
+                      </button>
+                    </div>
+
+                    {settings.escalationEnabled && (
+                      <div className="setting-row">
+                        <div className="setting-info">
+                          <span>Escalate after</span>
+                        </div>
+                        <select
+                          value={settings.escalationAfterMinutes}
+                          onChange={(e) => updateSetting('escalationAfterMinutes', parseInt(e.target.value))}
+                        >
+                          <option value={2}>2 minutes</option>
+                          <option value={5}>5 minutes</option>
+                          <option value={10}>10 minutes</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Reminder Types */}
+                  <div className="setting-section">
+                    <h3>
+                      <BellRing size={18} />
+                      Reminder Types
+                    </h3>
+
+                    {/* Morning Routine */}
+                    <div className="reminder-setting">
+                      <div className="setting-row">
+                        <div className="setting-info">
+                          <Sun size={18} />
+                          <span>Morning Routine</span>
+                        </div>
+                        <button
+                          className={`toggle-switch small ${settings.morningRoutineReminder ? 'on' : 'off'}`}
+                          onClick={() => updateSetting('morningRoutineReminder', !settings.morningRoutineReminder)}
+                        >
+                          <span className="toggle-slider" />
+                        </button>
+                      </div>
+                      {settings.morningRoutineReminder && (
+                        <div className="sub-setting">
+                          <span>Remind at</span>
+                          <input
+                            type="time"
+                            value={settings.morningRoutineTime}
+                            onChange={(e) => updateSetting('morningRoutineTime', e.target.value)}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Night Routine */}
+                    <div className="reminder-setting">
+                      <div className="setting-row">
+                        <div className="setting-info">
+                          <Moon size={18} />
+                          <span>Nighttime Routine</span>
+                        </div>
+                        <button
+                          className={`toggle-switch small ${settings.nightRoutineReminder ? 'on' : 'off'}`}
+                          onClick={() => updateSetting('nightRoutineReminder', !settings.nightRoutineReminder)}
+                        >
+                          <span className="toggle-slider" />
+                        </button>
+                      </div>
+                      {settings.nightRoutineReminder && (
+                        <div className="sub-setting">
+                          <span>Remind at</span>
+                          <input
+                            type="time"
+                            value={settings.nightRoutineTime}
+                            onChange={(e) => updateSetting('nightRoutineTime', e.target.value)}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Daily Reflection */}
+                    <div className="reminder-setting">
+                      <div className="setting-row">
+                        <div className="setting-info">
+                          <Sparkles size={18} />
+                          <span>Evening Reflection</span>
+                        </div>
+                        <button
+                          className={`toggle-switch small ${settings.reflectionReminder ? 'on' : 'off'}`}
+                          onClick={() => updateSetting('reflectionReminder', !settings.reflectionReminder)}
+                        >
+                          <span className="toggle-slider" />
+                        </button>
+                      </div>
+                      {settings.reflectionReminder && (
+                        <div className="sub-setting">
+                          <span>Remind at</span>
+                          <input
+                            type="time"
+                            value={settings.reflectionReminderTime}
+                            onChange={(e) => updateSetting('reflectionReminderTime', e.target.value)}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Task Reminders */}
+                    <div className="reminder-setting">
+                      <div className="setting-row">
+                        <div className="setting-info">
+                          <Calendar size={18} />
+                          <span>Task Reminders</span>
+                        </div>
+                        <button
+                          className={`toggle-switch small ${settings.taskReminders ? 'on' : 'off'}`}
+                          onClick={() => updateSetting('taskReminders', !settings.taskReminders)}
+                        >
+                          <span className="toggle-slider" />
+                        </button>
+                      </div>
+                      {settings.taskReminders && (
+                        <div className="sub-setting">
+                          <span>Remind</span>
+                          <select
+                            value={settings.taskReminderMinutes}
+                            onChange={(e) => updateSetting('taskReminderMinutes', parseInt(e.target.value))}
+                          >
+                            <option value={5}>5 min before</option>
+                            <option value={10}>10 min before</option>
+                            <option value={15}>15 min before</option>
+                            <option value={30}>30 min before</option>
+                            <option value={60}>1 hour before</option>
+                          </select>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Habit Reminders */}
+                    <div className="reminder-setting">
+                      <div className="setting-row">
+                        <div className="setting-info">
+                          <Repeat size={18} />
+                          <span>Habit Check-in</span>
+                        </div>
+                        <button
+                          className={`toggle-switch small ${settings.habitReminders ? 'on' : 'off'}`}
+                          onClick={() => updateSetting('habitReminders', !settings.habitReminders)}
+                        >
+                          <span className="toggle-slider" />
+                        </button>
+                      </div>
+                      {settings.habitReminders && (
+                        <div className="sub-setting">
+                          <span>Remind at</span>
+                          <input
+                            type="time"
+                            value={settings.habitReminderTime}
+                            onChange={(e) => updateSetting('habitReminderTime', e.target.value)}
+                          />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Streak Protection */}
+                    <div className="reminder-setting">
+                      <div className="setting-row">
+                        <div className="setting-info">
+                          <Shield size={18} />
+                          <span>Streak Protection</span>
+                          <small>Alert if habits not done by evening</small>
+                        </div>
+                        <button
+                          className={`toggle-switch small ${settings.streakProtection ? 'on' : 'off'}`}
+                          onClick={() => updateSetting('streakProtection', !settings.streakProtection)}
+                        >
+                          <span className="toggle-slider" />
+                        </button>
+                      </div>
+                      {settings.streakProtection && (
+                        <div className="sub-setting">
+                          <span>Check at</span>
+                          <input
+                            type="time"
+                            value={settings.streakProtectionTime}
+                            onChange={(e) => updateSetting('streakProtectionTime', e.target.value)}
+                          />
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Quiet Hours */}
+                  <div className="setting-section">
+                    <h3>
+                      <Moon size={18} />
+                      Quiet Hours
+                    </h3>
+
+                    <div className="setting-row">
+                      <div className="setting-info">
+                        <span>Enable Quiet Hours</span>
+                        <small>No notifications during sleep</small>
+                      </div>
+                      <button
+                        className={`toggle-switch small ${settings.quietHoursEnabled ? 'on' : 'off'}`}
+                        onClick={() => updateSetting('quietHoursEnabled', !settings.quietHoursEnabled)}
+                      >
+                        <span className="toggle-slider" />
+                      </button>
+                    </div>
+
+                    {settings.quietHoursEnabled && (
+                      <div className="quiet-hours-times">
+                        <div className="time-input">
+                          <label>Start</label>
+                          <input
+                            type="time"
+                            value={settings.quietHoursStart}
+                            onChange={(e) => updateSetting('quietHoursStart', e.target.value)}
+                          />
+                        </div>
+                        <span className="time-separator">to</span>
+                        <div className="time-input">
+                          <label>End</label>
+                          <input
+                            type="time"
+                            value={settings.quietHoursEnd}
+                            onChange={(e) => updateSetting('quietHoursEnd', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Test Notification */}
+                  <div className="test-section">
+                    <button
+                      className="test-btn"
+                      onClick={handleTestNotification}
+                      disabled={permissionStatus !== 'granted'}
+                    >
+                      <TestTube size={18} />
+                      {testingSound ? 'Playing...' : 'Test Notification'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {activeTab === 'schedule' && (
+            <div className="schedule-content">
+              {scheduledNotifications.length === 0 ? (
+                <div className="empty-schedule">
+                  <Bell size={48} />
+                  <p>No scheduled notifications</p>
+                  <span>Notifications will appear here when scheduled</span>
+                </div>
+              ) : (
+                <div className="scheduled-list">
+                  {scheduledNotifications.map((notification) => (
+                    <div key={notification.id} className="scheduled-item">
+                      <div className="scheduled-info">
+                        <h4>{notification.title}</h4>
+                        <p>{notification.body}</p>
+                        <span className="scheduled-time">
+                          {new Date(notification.triggerAt).toLocaleString()}
+                        </span>
+                      </div>
+                      {notification.recurring && (
+                        <span className="recurring-badge">
+                          <Repeat size={12} />
+                          {notification.recurrenceType}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+
+                  <button
+                    className="clear-all-btn"
+                    onClick={clearScheduledNotifications}
+                  >
+                    <Trash2 size={16} />
+                    Clear All
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Actions */}
+        <div className="nc-actions">
+          <button className="action-btn secondary" onClick={handleClose}>
+            Cancel
+          </button>
+          <button className="action-btn primary" onClick={handleSaveSettings}>
+            Save Settings
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}

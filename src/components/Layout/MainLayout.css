@@ -191,6 +191,18 @@
   box-shadow: 0 0 12px rgba(139, 92, 246, 0.3);
 }
 
+/* Notifications Button */
+.header-action-btn.notifications {
+  background: linear-gradient(135deg, rgba(236, 72, 153, 0.1) 0%, rgba(219, 39, 119, 0.1) 100%);
+  border-color: rgba(236, 72, 153, 0.3);
+  color: #ec4899;
+}
+
+.header-action-btn.notifications:hover {
+  background: linear-gradient(135deg, rgba(236, 72, 153, 0.2) 0%, rgba(219, 39, 119, 0.2) 100%);
+  box-shadow: 0 0 12px rgba(236, 72, 153, 0.3);
+}
+
 /* Daily Reflection Button */
 .header-action-btn.reflection {
   background: linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(236, 72, 153, 0.2) 100%);

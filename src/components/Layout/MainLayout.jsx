@@ -25,6 +25,7 @@ import {
   Sunrise,
   Sunset,
   Bell,
+  BellRing,
 } from 'lucide-react';
 import './MainLayout.css';
 
@@ -43,6 +44,7 @@ export default function MainLayout({ leftPanel, rightPanel }) {
     setShowMorningRoutine,
     setShowNightRoutine,
     setShowReminders,
+    setShowNotificationCenter,
   } = useApp();
 
   const { user, signOut, isConfigured } = useAuth();
@@ -207,13 +209,13 @@ export default function MainLayout({ leftPanel, rightPanel }) {
             <Sunset size={18} />
           </button>
 
-          {/* Reminders Button */}
+          {/* Notification Center Button */}
           <button
-            className="header-action-btn reminders"
-            onClick={() => setShowReminders(true)}
-            title="Reminders"
+            className="header-action-btn notifications"
+            onClick={() => setShowNotificationCenter(true)}
+            title="Notifications & Reminders"
           >
-            <Bell size={18} />
+            <BellRing size={18} />
           </button>
 
           {/* Daily Reflection Button */}
@@ -291,10 +293,10 @@ export default function MainLayout({ leftPanel, rightPanel }) {
                   <span>Nighttime Routine</span>
                 </button>
 
-                {/* Reminders in Menu */}
-                <button className="user-menu-item" onClick={() => { setShowReminders(true); setShowUserMenu(false); }}>
-                  <Bell size={16} />
-                  <span>Reminders</span>
+                {/* Notification Center in Menu */}
+                <button className="user-menu-item" onClick={() => { setShowNotificationCenter(true); setShowUserMenu(false); }}>
+                  <BellRing size={16} />
+                  <span>Notifications</span>
                 </button>
 
                 {/* Daily Reflection in Menu */}
