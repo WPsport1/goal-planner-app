@@ -43,8 +43,8 @@ function initializeFirebaseInSW() {
       const notificationTitle = payload.notification?.title || payload.data?.title || 'Goal Planner';
       const notificationOptions = {
         body: payload.notification?.body || payload.data?.body || 'You have a new notification',
-        icon: payload.notification?.icon || '/icon-192.png',
-        badge: '/icon-192.png',
+        icon: payload.notification?.icon || '/vite.svg',
+        badge: '/vite.svg',
         vibrate: [200, 100, 200, 100, 200],
         requireInteraction: true,
         tag: payload.data?.tag || 'goal-planner-fcm',
@@ -143,8 +143,8 @@ self.addEventListener('push', (event) => {
     const title = payload.notification?.title || payload.title || 'Goal Planner';
     const options = {
       body: payload.notification?.body || payload.body || 'New notification',
-      icon: '/icon-192.png',
-      badge: '/icon-192.png',
+      icon: '/vite.svg',
+      badge: '/vite.svg',
       vibrate: [200, 100, 200, 100, 200],
       requireInteraction: true,
       tag: payload.tag || 'goal-planner-push',

@@ -33,8 +33,8 @@ self.addEventListener('push', (event) => {
   let data = {
     title: 'Goal Planner',
     body: 'You have a new notification',
-    icon: '/icon-192.png',
-    badge: '/icon-192.png',
+    icon: '/vite.svg',
+    badge: '/vite.svg',
   };
 
   if (event.data) {
@@ -47,8 +47,8 @@ self.addEventListener('push', (event) => {
 
   const options = {
     body: data.body,
-    icon: data.icon || '/icon-192.png',
-    badge: data.badge || '/icon-192.png',
+    icon: data.icon || '/vite.svg',
+    badge: data.badge || '/vite.svg',
     vibrate: [200, 100, 200, 100, 200],
     requireInteraction: true,
     tag: data.tag || 'goal-planner-push',
@@ -157,8 +157,8 @@ self.addEventListener('message', (event) => {
     case 'SHOW_NOTIFICATION':
       self.registration.showNotification(data.title, {
         body: data.body,
-        icon: data.icon || '/icon-192.png',
-        badge: '/icon-192.png',
+        icon: data.icon || '/vite.svg',
+        badge: '/vite.svg',
         vibrate: data.vibrate || [200, 100, 200],
         requireInteraction: data.requireInteraction !== false,
         tag: data.tag || 'goal-planner',

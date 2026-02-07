@@ -64,24 +64,29 @@ export const showLocalNotification = (title, options = {}) => {
   }
 
   const defaultOptions = {
-    icon: '/icon-192.png',
-    badge: '/icon-192.png',
+    icon: '/vite.svg',
+    badge: '/vite.svg',
     vibrate: [200, 100, 200, 100, 200],
-    requireInteraction: true, // Keeps notification visible until user interacts
-    tag: options.tag || 'goal-planner-notification',
+    requireInteraction: options.requireInteraction !== false,
+    tag: options.tag || 'goal-planner-notification-' + Date.now(),
     renotify: true,
-    actions: options.actions || [],
     ...options
   };
 
-  // Try to show via service worker for persistence
-  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
-    navigator.serviceWorker.ready.then(registration => {
-      registration.showNotification(title, defaultOptions);
-    });
-  } else {
-    // Fallback to regular notification
-    new Notification(title, defaultOptions);
+  // Always try the basic Notification API first for reliability
+  try {
+    const notification = new Notification(title, defaultOptions);
+    console.log('Notification shown:', title);
+    return notification;
+  } catch (error) {
+    console.error('Error showing notification:', error);
+
+    // Fallback: try via service worker
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.ready.then(registration => {
+        registration.showNotification(title, defaultOptions);
+      }).catch(err => console.error('SW notification failed:', err));
+    }
   }
 };
 
