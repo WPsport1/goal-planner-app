@@ -113,7 +113,6 @@ export const showLocalNotification = (title, options = {}) => {
         renotify: true,
       });
     }).catch(err => console.error('SW notification failed:', err));
-    }
   }
 };
 
