@@ -14,6 +14,10 @@ import {
   ListTodo,
   FileText,
   Clock,
+  Bell,
+  BellOff,
+  Volume2,
+  Repeat,
 } from 'lucide-react';
 import {
   LineChart,
@@ -232,6 +236,15 @@ export default function DetailModal() {
             <TrendingUp size={16} />
             Tracking
           </button>
+          {!isGoal && (
+            <button
+              className={activeSection === 'reminders' ? 'active' : ''}
+              onClick={() => setActiveSection('reminders')}
+            >
+              <Bell size={16} />
+              Reminders
+            </button>
+          )}
         </div>
 
         {/* Modal Content */}
@@ -592,6 +605,129 @@ export default function DetailModal() {
                     </div>
                   ))}
               </div>
+            </div>
+          )}
+
+          {/* Reminders Section (Tasks only) */}
+          {activeSection === 'reminders' && !isGoal && (
+            <div className="section reminders-section">
+              <h3>Reminder Settings</h3>
+
+              {/* Master Toggle */}
+              <div className="reminder-master-toggle">
+                <button
+                  className={`toggle-btn ${editedItem.reminderEnabled !== false ? 'enabled' : 'disabled'}`}
+                  onClick={() => handleChange('reminderEnabled', editedItem.reminderEnabled === false)}
+                >
+                  {editedItem.reminderEnabled !== false ? <Bell size={24} /> : <BellOff size={24} />}
+                  <span>{editedItem.reminderEnabled !== false ? 'Reminders Enabled' : 'Reminders Disabled'}</span>
+                </button>
+              </div>
+
+              {editedItem.reminderEnabled !== false && (
+                <div className="reminder-settings">
+                  {/* When to remind */}
+                  <div className="setting-group">
+                    <label>
+                      <Clock size={16} />
+                      Remind me
+                    </label>
+                    <select
+                      value={editedItem.reminderMinutes || 15}
+                      onChange={(e) => handleChange('reminderMinutes', parseInt(e.target.value))}
+                    >
+                      <option value={0}>At start time</option>
+                      <option value={5}>5 minutes before</option>
+                      <option value={10}>10 minutes before</option>
+                      <option value={15}>15 minutes before</option>
+                      <option value={30}>30 minutes before</option>
+                      <option value={60}>1 hour before</option>
+                      <option value={120}>2 hours before</option>
+                      <option value={1440}>1 day before</option>
+                    </select>
+                  </div>
+
+                  {/* Sound */}
+                  <div className="setting-group">
+                    <label>
+                      <Volume2 size={16} />
+                      Notification Sound
+                    </label>
+                    <select
+                      value={editedItem.reminderSound || 'default'}
+                      onChange={(e) => handleChange('reminderSound', e.target.value)}
+                    >
+                      <option value="default">Default</option>
+                      <option value="gentle">Gentle</option>
+                      <option value="alarm">Alarm</option>
+                      <option value="urgent">Urgent</option>
+                    </select>
+                  </div>
+
+                  {/* Repeat until acknowledged */}
+                  <div className="setting-group checkbox">
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={editedItem.reminderRepeat || false}
+                        onChange={(e) => handleChange('reminderRepeat', e.target.checked)}
+                      />
+                      <Repeat size={16} />
+                      Repeat until acknowledged
+                    </label>
+                    <span className="setting-description">
+                      Notification will repeat every 5 minutes until you dismiss it
+                    </span>
+                  </div>
+
+                  {/* Additional reminders */}
+                  <div className="additional-reminders">
+                    <h4>Additional Reminders</h4>
+                    <p className="hint">Add extra reminder times for this task</p>
+
+                    <div className="extra-reminders-list">
+                      {(editedItem.extraReminders || []).map((reminder, idx) => (
+                        <div key={idx} className="extra-reminder-item">
+                          <Clock size={14} />
+                          <span>{reminder} minutes before</span>
+                          <button
+                            onClick={() => {
+                              const updated = [...(editedItem.extraReminders || [])];
+                              updated.splice(idx, 1);
+                              handleChange('extraReminders', updated);
+                            }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="add-extra-reminder">
+                      <select id="extra-reminder-select" defaultValue="30">
+                        <option value="5">5 minutes before</option>
+                        <option value="15">15 minutes before</option>
+                        <option value="30">30 minutes before</option>
+                        <option value="60">1 hour before</option>
+                        <option value="120">2 hours before</option>
+                      </select>
+                      <button
+                        onClick={() => {
+                          const select = document.getElementById('extra-reminder-select');
+                          const value = parseInt(select.value);
+                          const current = editedItem.extraReminders || [];
+                          if (!current.includes(value)) {
+                            handleChange('extraReminders', [...current, value].sort((a, b) => b - a));
+                          }
+                        }}
+                      >
+                        <Plus size={14} />
+                        Add
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>

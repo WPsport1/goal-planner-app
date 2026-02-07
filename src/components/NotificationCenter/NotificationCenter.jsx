@@ -64,6 +64,19 @@ export default function NotificationCenter() {
   const [fcmToken, setFcmToken] = useState(null);
   const [settingUpFirebase, setSettingUpFirebase] = useState(false);
 
+  // Custom reminder form state
+  const [customReminders, setCustomReminders] = useState([]);
+  const [newReminder, setNewReminder] = useState({
+    title: '',
+    message: '',
+    time: '09:00',
+    date: new Date().toISOString().split('T')[0],
+    recurring: false,
+    recurrenceType: 'daily',
+    sound: 'default',
+  });
+  const [editingReminderId, setEditingReminderId] = useState(null);
+
   // Default settings
   const [settings, setSettings] = useState({
     enabled: true,
@@ -115,6 +128,14 @@ export default function NotificationCenter() {
       setSettings({ ...settings, ...notificationSettings });
     }
   }, [notificationSettings]);
+
+  // Load custom reminders from localStorage
+  useEffect(() => {
+    const savedReminders = localStorage.getItem('customReminders');
+    if (savedReminders) {
+      setCustomReminders(JSON.parse(savedReminders));
+    }
+  }, []);
 
   // Check support and permission on mount
   useEffect(() => {
@@ -222,6 +243,111 @@ export default function NotificationCenter() {
     setSettings((prev) => ({ ...prev, [key]: value }));
   };
 
+  // Custom reminder functions
+  const saveCustomReminders = (reminders) => {
+    setCustomReminders(reminders);
+    localStorage.setItem('customReminders', JSON.stringify(reminders));
+  };
+
+  const handleAddReminder = () => {
+    if (!newReminder.title.trim()) return;
+
+    const reminder = {
+      id: Date.now().toString(),
+      ...newReminder,
+      createdAt: new Date().toISOString(),
+    };
+
+    const updated = [...customReminders, reminder];
+    saveCustomReminders(updated);
+
+    // Schedule the notification
+    const triggerDate = new Date(`${newReminder.date}T${newReminder.time}`);
+    if (triggerDate > new Date()) {
+      import('../../services/notifications').then(({ scheduleNotification }) => {
+        scheduleNotification({
+          title: newReminder.title,
+          body: newReminder.message,
+          triggerAt: triggerDate.toISOString(),
+          sound: true,
+          soundType: newReminder.sound,
+          recurring: newReminder.recurring,
+          recurrenceType: newReminder.recurrenceType,
+          customReminderId: reminder.id,
+        });
+      });
+    }
+
+    // Reset form
+    setNewReminder({
+      title: '',
+      message: '',
+      time: '09:00',
+      date: new Date().toISOString().split('T')[0],
+      recurring: false,
+      recurrenceType: 'daily',
+      sound: 'default',
+    });
+  };
+
+  const handleEditReminder = (reminder) => {
+    setEditingReminderId(reminder.id);
+    setNewReminder({
+      title: reminder.title,
+      message: reminder.message || '',
+      time: reminder.time,
+      date: reminder.date,
+      recurring: reminder.recurring || false,
+      recurrenceType: reminder.recurrenceType || 'daily',
+      sound: reminder.sound || 'default',
+    });
+  };
+
+  const handleUpdateReminder = () => {
+    if (!newReminder.title.trim() || !editingReminderId) return;
+
+    const updated = customReminders.map((r) =>
+      r.id === editingReminderId
+        ? { ...r, ...newReminder, updatedAt: new Date().toISOString() }
+        : r
+    );
+    saveCustomReminders(updated);
+
+    setEditingReminderId(null);
+    setNewReminder({
+      title: '',
+      message: '',
+      time: '09:00',
+      date: new Date().toISOString().split('T')[0],
+      recurring: false,
+      recurrenceType: 'daily',
+      sound: 'default',
+    });
+  };
+
+  const handleDeleteReminder = (id) => {
+    const updated = customReminders.filter((r) => r.id !== id);
+    saveCustomReminders(updated);
+
+    // Remove from scheduled notifications
+    import('../../services/notifications').then(({ removeScheduledNotification }) => {
+      removeScheduledNotification(id);
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingReminderId(null);
+    setNewReminder({
+      title: '',
+      message: '',
+      time: '09:00',
+      date: new Date().toISOString().split('T')[0],
+      recurring: false,
+      recurrenceType: 'daily',
+      sound: 'default',
+    });
+  };
+
   const renderPermissionSection = () => {
     if (!isSupported) {
       return (
@@ -309,6 +435,13 @@ export default function NotificationCenter() {
           >
             <Settings size={16} />
             Settings
+          </button>
+          <button
+            className={`tab-btn ${activeTab === 'custom' ? 'active' : ''}`}
+            onClick={() => setActiveTab('custom')}
+          >
+            <Plus size={16} />
+            Custom
           </button>
           <button
             className={`tab-btn ${activeTab === 'schedule' ? 'active' : ''}`}
@@ -722,6 +855,156 @@ export default function NotificationCenter() {
                   </div>
                 </>
               )}
+            </div>
+          )}
+
+          {activeTab === 'custom' && (
+            <div className="custom-content">
+              {/* Add/Edit Reminder Form */}
+              <div className="custom-reminder-form">
+                <h3>{editingReminderId ? 'Edit Reminder' : 'Create Custom Reminder'}</h3>
+
+                <div className="form-group">
+                  <label>Title *</label>
+                  <input
+                    type="text"
+                    placeholder="e.g., Take medication, Call mom..."
+                    value={newReminder.title}
+                    onChange={(e) => setNewReminder({ ...newReminder, title: e.target.value })}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label>Message (optional)</label>
+                  <input
+                    type="text"
+                    placeholder="Additional details..."
+                    value={newReminder.message}
+                    onChange={(e) => setNewReminder({ ...newReminder, message: e.target.value })}
+                  />
+                </div>
+
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Date</label>
+                    <input
+                      type="date"
+                      value={newReminder.date}
+                      onChange={(e) => setNewReminder({ ...newReminder, date: e.target.value })}
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>Time</label>
+                    <input
+                      type="time"
+                      value={newReminder.time}
+                      onChange={(e) => setNewReminder({ ...newReminder, time: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                <div className="form-group">
+                  <label>Sound</label>
+                  <select
+                    value={newReminder.sound}
+                    onChange={(e) => setNewReminder({ ...newReminder, sound: e.target.value })}
+                  >
+                    <option value="default">Default</option>
+                    <option value="gentle">Gentle</option>
+                    <option value="alarm">Alarm</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+
+                <div className="form-group checkbox">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={newReminder.recurring}
+                      onChange={(e) => setNewReminder({ ...newReminder, recurring: e.target.checked })}
+                    />
+                    <Repeat size={16} />
+                    Recurring reminder
+                  </label>
+                </div>
+
+                {newReminder.recurring && (
+                  <div className="form-group">
+                    <label>Repeat</label>
+                    <select
+                      value={newReminder.recurrenceType}
+                      onChange={(e) => setNewReminder({ ...newReminder, recurrenceType: e.target.value })}
+                    >
+                      <option value="daily">Daily</option>
+                      <option value="weekly">Weekly</option>
+                      <option value="weekdays">Weekdays only</option>
+                      <option value="monthly">Monthly</option>
+                    </select>
+                  </div>
+                )}
+
+                <div className="form-actions">
+                  {editingReminderId && (
+                    <button className="cancel-btn" onClick={cancelEdit}>
+                      Cancel
+                    </button>
+                  )}
+                  <button
+                    className="save-btn"
+                    onClick={editingReminderId ? handleUpdateReminder : handleAddReminder}
+                    disabled={!newReminder.title.trim()}
+                  >
+                    <Plus size={16} />
+                    {editingReminderId ? 'Update Reminder' : 'Add Reminder'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Custom Reminders List */}
+              <div className="custom-reminders-list">
+                <h4>Your Custom Reminders ({customReminders.length})</h4>
+
+                {customReminders.length === 0 ? (
+                  <div className="empty-reminders">
+                    <Bell size={32} />
+                    <p>No custom reminders yet</p>
+                    <span>Create your first reminder above</span>
+                  </div>
+                ) : (
+                  customReminders.map((reminder) => (
+                    <div key={reminder.id} className="custom-reminder-item">
+                      <div className="reminder-info">
+                        <h5>{reminder.title}</h5>
+                        {reminder.message && <p>{reminder.message}</p>}
+                        <div className="reminder-meta">
+                          <span>
+                            <Clock size={12} />
+                            {reminder.time}
+                          </span>
+                          <span>
+                            <Calendar size={12} />
+                            {new Date(reminder.date).toLocaleDateString()}
+                          </span>
+                          {reminder.recurring && (
+                            <span className="recurring-badge">
+                              <Repeat size={12} />
+                              {reminder.recurrenceType}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="reminder-actions">
+                        <button onClick={() => handleEditReminder(reminder)} title="Edit">
+                          <Settings size={14} />
+                        </button>
+                        <button onClick={() => handleDeleteReminder(reminder.id)} title="Delete">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
             </div>
           )}
 

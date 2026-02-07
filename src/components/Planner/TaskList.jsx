@@ -16,6 +16,10 @@ import {
   Repeat,
   Calendar,
   ListTodo,
+  Bell,
+  BellOff,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { format, parseISO, isToday, isTomorrow, isThisWeek } from 'date-fns';
 import './TaskList.css';
@@ -47,6 +51,17 @@ const recurrenceOptions = [
   { value: 'monthly', label: 'Monthly' },
 ];
 
+const reminderOptions = [
+  { value: 0, label: 'At start time' },
+  { value: 5, label: '5 minutes before' },
+  { value: 10, label: '10 minutes before' },
+  { value: 15, label: '15 minutes before' },
+  { value: 30, label: '30 minutes before' },
+  { value: 60, label: '1 hour before' },
+  { value: 120, label: '2 hours before' },
+  { value: 1440, label: '1 day before' },
+];
+
 export default function TaskList() {
   const { tasks, goals, addTask, deleteTask, toggleTaskComplete, openDetail, reorderTasks } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
@@ -65,8 +80,14 @@ export default function TaskList() {
     endTime: '09:30',
     recurrence: 'none',
     linkedGoalId: '',
+    // Reminder settings
+    reminderEnabled: true,
+    reminderMinutes: 15,
+    reminderSound: 'default',
+    reminderRepeat: false,
   });
   const [draggedItem, setDraggedItem] = useState(null);
+  const [showReminderOptions, setShowReminderOptions] = useState(false);
 
   // Filter and sort tasks
   const filteredTasks = tasks
@@ -141,8 +162,13 @@ export default function TaskList() {
       endTime: '09:30',
       recurrence: 'none',
       linkedGoalId: '',
+      reminderEnabled: true,
+      reminderMinutes: 15,
+      reminderSound: 'default',
+      reminderRepeat: false,
     });
     setShowAddForm(false);
+    setShowReminderOptions(false);
   };
 
   // Drag and drop handlers
@@ -233,6 +259,12 @@ export default function TaskList() {
               <span className="task-recurrence">
                 <Repeat size={12} />
                 {task.recurrence}
+              </span>
+            )}
+            {task.reminderEnabled !== false && (
+              <span className="task-reminder-indicator">
+                <Bell size={10} />
+                {task.reminderMinutes ? `${task.reminderMinutes}m` : 'On'}
               </span>
             )}
           </div>
@@ -396,6 +428,70 @@ export default function TaskList() {
                 </option>
               ))}
             </select>
+          </div>
+
+          {/* Reminder Settings Section */}
+          <div className="reminder-section">
+            <button
+              type="button"
+              className={`reminder-toggle ${newTask.reminderEnabled ? 'enabled' : 'disabled'}`}
+              onClick={() => setNewTask({ ...newTask, reminderEnabled: !newTask.reminderEnabled })}
+            >
+              {newTask.reminderEnabled ? <Bell size={16} /> : <BellOff size={16} />}
+              <span>{newTask.reminderEnabled ? 'Reminder On' : 'Reminder Off'}</span>
+              <button
+                type="button"
+                className="expand-btn"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowReminderOptions(!showReminderOptions);
+                }}
+              >
+                {showReminderOptions ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </button>
+            </button>
+
+            {showReminderOptions && newTask.reminderEnabled && (
+              <div className="reminder-options">
+                <div className="reminder-option">
+                  <label>Remind me</label>
+                  <select
+                    value={newTask.reminderMinutes}
+                    onChange={(e) => setNewTask({ ...newTask, reminderMinutes: parseInt(e.target.value) })}
+                  >
+                    {reminderOptions.map((opt) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="reminder-option">
+                  <label>Sound</label>
+                  <select
+                    value={newTask.reminderSound}
+                    onChange={(e) => setNewTask({ ...newTask, reminderSound: e.target.value })}
+                  >
+                    <option value="default">Default</option>
+                    <option value="gentle">Gentle</option>
+                    <option value="alarm">Alarm</option>
+                    <option value="urgent">Urgent</option>
+                  </select>
+                </div>
+
+                <div className="reminder-option checkbox">
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={newTask.reminderRepeat}
+                      onChange={(e) => setNewTask({ ...newTask, reminderRepeat: e.target.checked })}
+                    />
+                    Repeat until acknowledged
+                  </label>
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="form-actions">
