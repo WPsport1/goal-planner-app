@@ -58,34 +58,61 @@ export const registerServiceWorker = async () => {
 
 // Show a local notification (for when app is open)
 export const showLocalNotification = (title, options = {}) => {
-  if (getPermissionStatus() !== 'granted') {
-    console.warn('Notification permission not granted');
-    return;
+  const body = options.body || '';
+
+  // Method 1: Try native Notification API
+  if (getPermissionStatus() === 'granted') {
+    const defaultOptions = {
+      icon: '/vite.svg',
+      badge: '/vite.svg',
+      vibrate: [200, 100, 200, 100, 200],
+      requireInteraction: options.requireInteraction !== false,
+      tag: options.tag || 'goal-planner-notification-' + Date.now(),
+      renotify: true,
+      silent: false,
+      ...options
+    };
+
+    try {
+      const notification = new Notification(title, defaultOptions);
+      console.log('Notification shown:', title);
+
+      // Also dispatch a custom event for in-app display
+      window.dispatchEvent(new CustomEvent('app-notification', {
+        detail: { title, body, options }
+      }));
+
+      return notification;
+    } catch (error) {
+      console.error('Error showing notification:', error);
+    }
   }
 
-  const defaultOptions = {
-    icon: '/vite.svg',
-    badge: '/vite.svg',
-    vibrate: [200, 100, 200, 100, 200],
-    requireInteraction: options.requireInteraction !== false,
-    tag: options.tag || 'goal-planner-notification-' + Date.now(),
-    renotify: true,
-    ...options
-  };
+  // Method 2: Always show in-app notification as backup
+  window.dispatchEvent(new CustomEvent('app-notification', {
+    detail: { title, body, options }
+  }));
 
-  // Always try the basic Notification API first for reliability
-  try {
-    const notification = new Notification(title, defaultOptions);
-    console.log('Notification shown:', title);
-    return notification;
-  } catch (error) {
-    console.error('Error showing notification:', error);
+  // Method 3: For critical notifications, use alert as ultimate fallback
+  if (options.critical) {
+    setTimeout(() => {
+      alert(`${title}\n\n${body}`);
+    }, 100);
+  }
 
-    // Fallback: try via service worker
-    if ('serviceWorker' in navigator) {
-      navigator.serviceWorker.ready.then(registration => {
-        registration.showNotification(title, defaultOptions);
-      }).catch(err => console.error('SW notification failed:', err));
+  // Method 4: Try via service worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.ready.then(registration => {
+      registration.showNotification(title, {
+        body,
+        icon: '/vite.svg',
+        badge: '/vite.svg',
+        vibrate: [200, 100, 200, 100, 200],
+        requireInteraction: true,
+        tag: 'goal-planner-sw-' + Date.now(),
+        renotify: true,
+      });
+    }).catch(err => console.error('SW notification failed:', err));
     }
   }
 };
