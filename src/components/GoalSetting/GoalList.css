@@ -422,3 +422,157 @@
   color: var(--text-muted);
   margin-left: 0.25rem;
 }
+
+.action-btn.tasks:hover {
+  color: var(--accent-secondary);
+}
+
+/* Goal Tasks Summary */
+.goal-tasks-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 0.625rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-elevated);
+  border-radius: 6px;
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.goal-tasks-summary:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.goal-tasks-summary .expand-icon {
+  margin-left: auto;
+  transition: transform 0.2s ease;
+}
+
+.goal-tasks-summary .expand-icon.rotated {
+  transform: rotate(90deg);
+}
+
+/* Quick Task Form */
+.quick-task-form {
+  display: flex;
+  gap: 0.5rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-primary);
+  width: 100%;
+}
+
+.quick-task-form input {
+  flex: 1;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+}
+
+.quick-task-form input:focus {
+  outline: none;
+  border-color: var(--accent-primary);
+}
+
+.quick-task-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: var(--accent-primary);
+  border: none;
+  border-radius: 6px;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.quick-task-btn:hover {
+  background: var(--accent-hover);
+}
+
+/* Linked Tasks List */
+.goal-linked-tasks {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+  padding: 0.75rem 1rem;
+  background: var(--bg-secondary);
+  border-top: 1px solid var(--border-primary);
+  width: 100%;
+}
+
+.linked-task-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  background: var(--bg-tertiary);
+  border-radius: 6px;
+  font-size: 0.8rem;
+}
+
+.linked-task-item .task-check {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+
+.linked-task-item.completed .task-check {
+  color: var(--success);
+}
+
+.linked-task-item .task-title {
+  flex: 1;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.linked-task-item.completed .task-title {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
+.linked-task-item .task-date {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.view-all-tasks {
+  padding: 0.5rem;
+  background: none;
+  border: none;
+  color: var(--accent-primary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  text-align: center;
+  transition: color 0.2s ease;
+}
+
+.view-all-tasks:hover {
+  color: var(--accent-hover);
+}
+
+/* Goal Card with expanded state */
+.goal-card.expanded {
+  flex-wrap: wrap;
+}
+
+.goal-card.expanded .goal-drag-handle,
+.goal-card.expanded .goal-priority-indicator {
+  align-self: flex-start;
+  min-height: 100px;
+}

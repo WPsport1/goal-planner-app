@@ -15,6 +15,9 @@ import RoutineBuilder from './components/RoutineBuilder/RoutineBuilder';
 import Reminders from './components/Reminders/Reminders';
 import NotificationCenter from './components/NotificationCenter/NotificationCenter';
 import NotificationToast from './components/NotificationToast/NotificationToast';
+import Journal from './components/Journal/Journal';
+import LifeScore from './components/LifeScore/LifeScore';
+import WeeklyPlanning from './components/WeeklyPlanning/WeeklyPlanning';
 import AuthPage from './components/Auth/AuthPage';
 import { Loader2 } from 'lucide-react';
 import './App.css';
@@ -51,6 +54,9 @@ function AppContent() {
       <Reminders />
       <NotificationCenter />
       <NotificationToast />
+      <Journal />
+      <LifeScore />
+      <WeeklyPlanning />
     </>
   );
 }

@@ -11,7 +11,13 @@ import {
   SortAsc,
   SortDesc,
   Search,
+  ListTodo,
+  CheckCircle2,
+  Circle,
+  Calendar,
+  Link2,
 } from 'lucide-react';
+import { format } from 'date-fns';
 import './GoalList.css';
 
 const priorityColors = {
@@ -28,7 +34,7 @@ const statusLabels = {
 };
 
 export default function GoalList() {
-  const { goals, addGoal, deleteGoal, openDetail, reorderGoals } = useApp();
+  const { goals, addGoal, deleteGoal, openDetail, reorderGoals, getTasksForGoal, createTaskForGoal, setActiveTab } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('priority'); // priority, date, progress, name
   const [sortOrder, setSortOrder] = useState('desc');
@@ -43,6 +49,9 @@ export default function GoalList() {
     targetDate: '',
   });
   const [draggedItem, setDraggedItem] = useState(null);
+  const [expandedGoalTasks, setExpandedGoalTasks] = useState({});
+  const [showQuickTaskForm, setShowQuickTaskForm] = useState(null);
+  const [quickTaskTitle, setQuickTaskTitle] = useState('');
 
   // Get unique categories from goals
   const categories = ['all', ...new Set(goals.map((g) => g.category))];
@@ -126,6 +135,32 @@ export default function GoalList() {
 
   const toggleSortOrder = () => {
     setSortOrder((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+  };
+
+  const toggleGoalTasks = (goalId) => {
+    setExpandedGoalTasks((prev) => ({
+      ...prev,
+      [goalId]: !prev[goalId],
+    }));
+  };
+
+  const handleQuickTaskCreate = async (goalId) => {
+    if (!quickTaskTitle.trim()) return;
+
+    await createTaskForGoal(goalId, {
+      title: quickTaskTitle,
+      scheduledDate: new Date().toISOString(),
+    });
+
+    setQuickTaskTitle('');
+    setShowQuickTaskForm(null);
+    // Expand to show the new task
+    setExpandedGoalTasks((prev) => ({ ...prev, [goalId]: true }));
+  };
+
+  const goToTasksForGoal = (goalId) => {
+    setActiveTab('planner');
+    // The planner will show tasks, user can filter by goal if needed
   };
 
   return (
@@ -250,79 +285,174 @@ export default function GoalList() {
             <span>Add your first goal to get started</span>
           </div>
         ) : (
-          filteredGoals.map((goal) => (
-            <div
-              key={goal.id}
-              className={`goal-card ${draggedItem?.id === goal.id ? 'dragging' : ''}`}
-              draggable
-              onDragStart={(e) => handleDragStart(e, goal)}
-              onDragOver={(e) => handleDragOver(e, goal)}
-              onDragEnd={handleDragEnd}
-            >
-              <div className="goal-drag-handle">
-                <GripVertical size={16} />
-              </div>
+          filteredGoals.map((goal) => {
+            const linkedTasks = getTasksForGoal(goal.id);
+            const completedTasks = linkedTasks.filter((t) => t.completed).length;
+            const isTasksExpanded = expandedGoalTasks[goal.id];
 
+            return (
               <div
-                className="goal-priority-indicator"
-                style={{ backgroundColor: priorityColors[goal.priority] }}
-              />
-
-              <div className="goal-content" onClick={() => openDetail(goal)}>
-                <div className="goal-header">
-                  <h3>{goal.title}</h3>
-                  <span className={`goal-status status-${goal.status}`}>
-                    {statusLabels[goal.status]}
-                  </span>
+                key={goal.id}
+                className={`goal-card ${draggedItem?.id === goal.id ? 'dragging' : ''} ${isTasksExpanded ? 'expanded' : ''}`}
+                draggable
+                onDragStart={(e) => handleDragStart(e, goal)}
+                onDragOver={(e) => handleDragOver(e, goal)}
+                onDragEnd={handleDragEnd}
+              >
+                <div className="goal-drag-handle">
+                  <GripVertical size={16} />
                 </div>
 
-                {goal.description && (
-                  <p className="goal-description">{goal.description}</p>
+                <div
+                  className="goal-priority-indicator"
+                  style={{ backgroundColor: priorityColors[goal.priority] }}
+                />
+
+                <div className="goal-content" onClick={() => openDetail(goal)}>
+                  <div className="goal-header">
+                    <h3>{goal.title}</h3>
+                    <span className={`goal-status status-${goal.status}`}>
+                      {statusLabels[goal.status]}
+                    </span>
+                  </div>
+
+                  {goal.description && (
+                    <p className="goal-description">{goal.description}</p>
+                  )}
+
+                  <div className="goal-meta">
+                    <span className="goal-category">{goal.category}</span>
+                    <span className="goal-date">
+                      Target: {new Date(goal.targetDate).toLocaleDateString()}
+                    </span>
+                  </div>
+
+                  <div className="goal-progress">
+                    <div className="progress-bar">
+                      <div
+                        className="progress-fill"
+                        style={{ width: `${goal.progress}%` }}
+                      />
+                    </div>
+                    <span className="progress-text">{goal.progress}%</span>
+                  </div>
+
+                  {/* Linked Tasks Summary */}
+                  {linkedTasks.length > 0 && (
+                    <div
+                      className="goal-tasks-summary"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        toggleGoalTasks(goal.id);
+                      }}
+                    >
+                      <Link2 size={14} />
+                      <span>
+                        {completedTasks}/{linkedTasks.length} tasks completed
+                      </span>
+                      <ChevronRight
+                        size={14}
+                        className={`expand-icon ${isTasksExpanded ? 'rotated' : ''}`}
+                      />
+                    </div>
+                  )}
+                </div>
+
+                <div className="goal-actions">
+                  <button
+                    className="action-btn tasks"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowQuickTaskForm(showQuickTaskForm === goal.id ? null : goal.id);
+                    }}
+                    title="Add Task"
+                  >
+                    <ListTodo size={14} />
+                  </button>
+                  <button
+                    className="action-btn edit"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openDetail(goal);
+                    }}
+                    title="Edit"
+                  >
+                    <Edit3 size={14} />
+                  </button>
+                  <button
+                    className="action-btn delete"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (confirm('Delete this goal?')) deleteGoal(goal.id);
+                    }}
+                    title="Delete"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                  <ChevronRight size={16} className="chevron" />
+                </div>
+
+                {/* Quick Task Form */}
+                {showQuickTaskForm === goal.id && (
+                  <div className="quick-task-form" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="text"
+                      placeholder="Enter task title..."
+                      value={quickTaskTitle}
+                      onChange={(e) => setQuickTaskTitle(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleQuickTaskCreate(goal.id);
+                        if (e.key === 'Escape') {
+                          setShowQuickTaskForm(null);
+                          setQuickTaskTitle('');
+                        }
+                      }}
+                      autoFocus
+                    />
+                    <button
+                      className="quick-task-btn"
+                      onClick={() => handleQuickTaskCreate(goal.id)}
+                    >
+                      <Plus size={16} />
+                    </button>
+                  </div>
                 )}
 
-                <div className="goal-meta">
-                  <span className="goal-category">{goal.category}</span>
-                  <span className="goal-date">
-                    Target: {new Date(goal.targetDate).toLocaleDateString()}
-                  </span>
-                </div>
-
-                <div className="goal-progress">
-                  <div className="progress-bar">
-                    <div
-                      className="progress-fill"
-                      style={{ width: `${goal.progress}%` }}
-                    />
+                {/* Expanded Tasks List */}
+                {isTasksExpanded && linkedTasks.length > 0 && (
+                  <div className="goal-linked-tasks" onClick={(e) => e.stopPropagation()}>
+                    {linkedTasks.slice(0, 5).map((task) => (
+                      <div
+                        key={task.id}
+                        className={`linked-task-item ${task.completed ? 'completed' : ''}`}
+                      >
+                        {task.completed ? (
+                          <CheckCircle2 size={14} className="task-check" />
+                        ) : (
+                          <Circle size={14} className="task-check" />
+                        )}
+                        <span className="task-title">{task.title}</span>
+                        {task.scheduledDate && (
+                          <span className="task-date">
+                            <Calendar size={12} />
+                            {format(new Date(task.scheduledDate), 'MMM d')}
+                          </span>
+                        )}
+                      </div>
+                    ))}
+                    {linkedTasks.length > 5 && (
+                      <button
+                        className="view-all-tasks"
+                        onClick={() => goToTasksForGoal(goal.id)}
+                      >
+                        View all {linkedTasks.length} tasks →
+                      </button>
+                    )}
                   </div>
-                  <span className="progress-text">{goal.progress}%</span>
-                </div>
+                )}
               </div>
-
-              <div className="goal-actions">
-                <button
-                  className="action-btn edit"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openDetail(goal);
-                  }}
-                  title="Edit"
-                >
-                  <Edit3 size={14} />
-                </button>
-                <button
-                  className="action-btn delete"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    if (confirm('Delete this goal?')) deleteGoal(goal.id);
-                  }}
-                  title="Delete"
-                >
-                  <Trash2 size={14} />
-                </button>
-                <ChevronRight size={16} className="chevron" />
-              </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>

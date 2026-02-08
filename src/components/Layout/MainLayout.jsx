@@ -26,6 +26,9 @@ import {
   Sunset,
   Bell,
   BellRing,
+  PenLine,
+  Activity,
+  CalendarCheck,
 } from 'lucide-react';
 import './MainLayout.css';
 
@@ -45,6 +48,9 @@ export default function MainLayout({ leftPanel, rightPanel }) {
     setShowNightRoutine,
     setShowReminders,
     setShowNotificationCenter,
+    setShowJournal,
+    setShowLifeScore,
+    setShowWeeklyPlanning,
   } = useApp();
 
   const { user, signOut, isConfigured } = useAuth();
@@ -209,6 +215,33 @@ export default function MainLayout({ leftPanel, rightPanel }) {
             <Sunset size={18} />
           </button>
 
+          {/* Journal Button */}
+          <button
+            className="header-action-btn journal"
+            onClick={() => setShowJournal(true)}
+            title="Journal"
+          >
+            <PenLine size={18} />
+          </button>
+
+          {/* Life Score Button */}
+          <button
+            className="header-action-btn lifescore"
+            onClick={() => setShowLifeScore(true)}
+            title="Life Score Dashboard"
+          >
+            <Activity size={18} />
+          </button>
+
+          {/* Weekly Planning Button */}
+          <button
+            className="header-action-btn weeklyplanning"
+            onClick={() => setShowWeeklyPlanning(true)}
+            title="Weekly Planning"
+          >
+            <CalendarCheck size={18} />
+          </button>
+
           {/* Notification Center Button */}
           <button
             className="header-action-btn notifications"
@@ -291,6 +324,24 @@ export default function MainLayout({ leftPanel, rightPanel }) {
                 <button className="user-menu-item" onClick={() => { setShowNightRoutine(true); setShowUserMenu(false); }}>
                   <Sunset size={16} />
                   <span>Nighttime Routine</span>
+                </button>
+
+                {/* Journal in Menu */}
+                <button className="user-menu-item" onClick={() => { setShowJournal(true); setShowUserMenu(false); }}>
+                  <PenLine size={16} />
+                  <span>Journal</span>
+                </button>
+
+                {/* Life Score in Menu */}
+                <button className="user-menu-item" onClick={() => { setShowLifeScore(true); setShowUserMenu(false); }}>
+                  <Activity size={16} />
+                  <span>Life Score</span>
+                </button>
+
+                {/* Weekly Planning in Menu */}
+                <button className="user-menu-item" onClick={() => { setShowWeeklyPlanning(true); setShowUserMenu(false); }}>
+                  <CalendarCheck size={16} />
+                  <span>Weekly Planning</span>
                 </button>
 
                 {/* Notification Center in Menu */}

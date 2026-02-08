@@ -1,7 +1,16 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from './AuthContext';
-import { goalService, taskService, reflectionService, isSupabaseConfigured } from '../services/supabase';
+import {
+  goalService,
+  taskService,
+  reflectionService,
+  journalService,
+  lifeScoreService,
+  weeklyPlanService,
+  routineService,
+  isSupabaseConfigured
+} from '../services/supabase';
 import { isToday, parseISO, startOfDay, subDays, isSameDay } from 'date-fns';
 
 const AppContext = createContext();
@@ -110,6 +119,18 @@ export function AppProvider({ children }) {
   const [showNotificationCenter, setShowNotificationCenter] = useState(false);
   const [notificationSettings, setNotificationSettings] = useState(null);
 
+  // Journal state
+  const [showJournal, setShowJournal] = useState(false);
+  const [journalEntries, setJournalEntries] = useState([]);
+
+  // Life Score state
+  const [showLifeScore, setShowLifeScore] = useState(false);
+  const [lifeScoreData, setLifeScoreData] = useState(null);
+
+  // Weekly Planning state
+  const [showWeeklyPlanning, setShowWeeklyPlanning] = useState(false);
+  const [weeklyPlanningData, setWeeklyPlanningData] = useState(null);
+
   // Load data on mount
   useEffect(() => {
     const loadData = async () => {
@@ -119,7 +140,7 @@ export function AppProvider({ children }) {
       try {
         // If using cloud sync with authenticated user
         if (isConfigured && user) {
-          // Load from Supabase
+          // Load from Supabase - core data
           const [goalsResult, tasksResult, reflectionsResult] = await Promise.all([
             goalService.getAll(user.id),
             taskService.getAll(user.id),
@@ -147,6 +168,38 @@ export function AppProvider({ children }) {
             if (reflectionsResult.data) {
               setReflections(reflectionsResult.data.map(transformReflectionFromDB));
             }
+          }
+
+          // Load Phase 3 data (don't fail if tables don't exist yet)
+          try {
+            const [journalResult, lifeScoreResult, weeklyPlanResult, routinesResult] = await Promise.all([
+              journalService.getAll(user.id),
+              lifeScoreService.getAll(user.id),
+              weeklyPlanService.getAll(user.id),
+              routineService.getAll(user.id),
+            ]);
+
+            if (journalResult.data) {
+              setJournalEntries(journalResult.data.map(transformJournalFromDB));
+            }
+            if (lifeScoreResult.data && lifeScoreResult.data.length > 0) {
+              setLifeScoreData({
+                current: transformLifeScoreFromDB(lifeScoreResult.data[0]),
+                history: lifeScoreResult.data.map(transformLifeScoreFromDB),
+              });
+            }
+            if (weeklyPlanResult.data) {
+              setWeeklyPlanningData(weeklyPlanResult.data.map(transformWeeklyPlanFromDB));
+            }
+            if (routinesResult.data) {
+              const routinesObj = {};
+              routinesResult.data.forEach((r) => {
+                routinesObj[r.routine_key] = transformRoutineFromDB(r);
+              });
+              setRoutines(routinesObj);
+            }
+          } catch (phase3Err) {
+            console.warn('Phase 3 data not loaded (tables may not exist yet):', phase3Err);
           }
         } else {
           // Load from localStorage (local-only mode)
@@ -238,6 +291,30 @@ export function AppProvider({ children }) {
     const savedNotificationSettings = localStorage.getItem('notificationSettings');
     if (savedNotificationSettings) {
       setNotificationSettings(JSON.parse(savedNotificationSettings));
+    }
+  }, []);
+
+  // Load journal entries from localStorage
+  useEffect(() => {
+    const savedJournalEntries = localStorage.getItem('journalEntries');
+    if (savedJournalEntries) {
+      setJournalEntries(JSON.parse(savedJournalEntries));
+    }
+  }, []);
+
+  // Load life score data from localStorage
+  useEffect(() => {
+    const savedLifeScoreData = localStorage.getItem('lifeScoreData');
+    if (savedLifeScoreData) {
+      setLifeScoreData(JSON.parse(savedLifeScoreData));
+    }
+  }, []);
+
+  // Load weekly planning data from localStorage
+  useEffect(() => {
+    const savedWeeklyPlanningData = localStorage.getItem('weeklyPlanningData');
+    if (savedWeeklyPlanningData) {
+      setWeeklyPlanningData(JSON.parse(savedWeeklyPlanningData));
     }
   }, []);
 
@@ -347,6 +424,94 @@ export function AppProvider({ children }) {
     improvements: dbReflection.improvements,
     tomorrowFocus: dbReflection.tomorrow_focus,
     createdAt: dbReflection.created_at,
+  });
+
+  // Phase 3 transform functions
+  const transformJournalToDB = (entry) => ({
+    date: entry.date,
+    content: entry.content,
+    mood: entry.mood,
+    energy: entry.energy,
+    gratitude: entry.gratitude || [],
+    tags: entry.tags || [],
+  });
+
+  const transformJournalFromDB = (dbEntry) => ({
+    id: dbEntry.id,
+    date: dbEntry.date,
+    content: dbEntry.content,
+    mood: dbEntry.mood,
+    energy: dbEntry.energy,
+    gratitude: dbEntry.gratitude || [],
+    tags: dbEntry.tags || [],
+    createdAt: dbEntry.created_at,
+  });
+
+  const transformLifeScoreToDB = (score) => ({
+    date: score.date,
+    health: score.health,
+    relationships: score.relationships,
+    mindset: score.mindset,
+    career: score.career,
+    social: score.social,
+    finance: score.finance,
+    spirituality: score.spirituality,
+    purpose: score.purpose,
+    overall_score: score.overallScore,
+    notes: score.notes,
+  });
+
+  const transformLifeScoreFromDB = (dbScore) => ({
+    id: dbScore.id,
+    date: dbScore.date,
+    health: dbScore.health,
+    relationships: dbScore.relationships,
+    mindset: dbScore.mindset,
+    career: dbScore.career,
+    social: dbScore.social,
+    finance: dbScore.finance,
+    spirituality: dbScore.spirituality,
+    purpose: dbScore.purpose,
+    overallScore: dbScore.overall_score,
+    notes: dbScore.notes,
+    createdAt: dbScore.created_at,
+  });
+
+  const transformWeeklyPlanToDB = (plan) => ({
+    week_start: plan.weekStart,
+    reflections: plan.reflections || {},
+    priorities: plan.priorities || [],
+    weekly_goals: plan.weeklyGoals || [],
+    daily_tasks: plan.dailyTasks || {},
+    completed: plan.completed || false,
+  });
+
+  const transformWeeklyPlanFromDB = (dbPlan) => ({
+    id: dbPlan.id,
+    weekStart: dbPlan.week_start,
+    reflections: dbPlan.reflections || {},
+    priorities: dbPlan.priorities || [],
+    weeklyGoals: dbPlan.weekly_goals || [],
+    dailyTasks: dbPlan.daily_tasks || {},
+    completed: dbPlan.completed,
+    createdAt: dbPlan.created_at,
+  });
+
+  const transformRoutineToDB = (routine, key) => ({
+    routine_key: key,
+    routine_type: routine.type || 'morning',
+    day_of_week: routine.dayOfWeek,
+    week_variant: routine.weekVariant,
+    items: routine.items || [],
+  });
+
+  const transformRoutineFromDB = (dbRoutine) => ({
+    id: dbRoutine.id,
+    type: dbRoutine.routine_type,
+    dayOfWeek: dbRoutine.day_of_week,
+    weekVariant: dbRoutine.week_variant,
+    items: dbRoutine.items || [],
+    createdAt: dbRoutine.created_at,
   });
 
   // Calculate habit streak
@@ -695,12 +860,33 @@ export function AppProvider({ children }) {
 
   // Save a single routine by key (new unified system)
   // Key format: "{type}_{day}_{week}" e.g. "morning_monday_A"
-  const saveRoutine = (key, routine) => {
+  const saveRoutine = async (key, routine) => {
+    // Optimistic update
     setRoutines((prev) => {
       const updated = { ...prev, [key]: routine };
       localStorage.setItem('routines', JSON.stringify(updated));
       return updated;
     });
+
+    // Sync to cloud if available
+    if (isConfigured && user) {
+      try {
+        setIsSyncing(true);
+        const result = await routineService.upsert({
+          routineKey: key,
+          routineType: routine.type || 'morning',
+          dayOfWeek: routine.dayOfWeek,
+          weekVariant: routine.weekVariant,
+          items: routine.items || [],
+        }, user.id);
+        if (result.error) throw new Error(result.error);
+      } catch (err) {
+        console.error('Error syncing routine:', err);
+        setSyncError(err.message);
+      } finally {
+        setIsSyncing(false);
+      }
+    }
   };
 
   // Save reminders settings
@@ -713,6 +899,179 @@ export function AppProvider({ children }) {
   const saveNotificationSettings = (settings) => {
     setNotificationSettings(settings);
     localStorage.setItem('notificationSettings', JSON.stringify(settings));
+  };
+
+  // Journal operations
+  const addJournalEntry = async (entry) => {
+    const newEntry = {
+      id: uuidv4(),
+      createdAt: new Date().toISOString(),
+      date: new Date().toISOString(),
+      ...entry,
+    };
+
+    // Optimistic update
+    setJournalEntries((prev) => {
+      const updated = [...prev, newEntry];
+      localStorage.setItem('journalEntries', JSON.stringify(updated));
+      return updated;
+    });
+
+    // Sync to cloud if available
+    if (isConfigured && user) {
+      try {
+        setIsSyncing(true);
+        const result = await journalService.create(transformJournalToDB(newEntry), user.id);
+        if (result.error) throw new Error(result.error);
+        // Update with cloud-generated ID if different
+        if (result.data && result.data.id !== newEntry.id) {
+          setJournalEntries((prev) =>
+            prev.map((e) => (e.id === newEntry.id ? { ...e, id: result.data.id } : e))
+          );
+        }
+      } catch (err) {
+        console.error('Error syncing journal entry:', err);
+        setSyncError(err.message);
+      } finally {
+        setIsSyncing(false);
+      }
+    }
+
+    return newEntry;
+  };
+
+  const updateJournalEntry = async (id, updates) => {
+    // Optimistic update
+    setJournalEntries((prev) => {
+      const updated = prev.map((entry) =>
+        entry.id === id ? { ...entry, ...updates } : entry
+      );
+      localStorage.setItem('journalEntries', JSON.stringify(updated));
+      return updated;
+    });
+
+    // Sync to cloud if available
+    if (isConfigured && user) {
+      try {
+        setIsSyncing(true);
+        const result = await journalService.update(id, transformJournalToDB(updates));
+        if (result.error) throw new Error(result.error);
+      } catch (err) {
+        console.error('Error syncing journal update:', err);
+        setSyncError(err.message);
+      } finally {
+        setIsSyncing(false);
+      }
+    }
+  };
+
+  const deleteJournalEntry = async (id) => {
+    // Optimistic update
+    setJournalEntries((prev) => {
+      const updated = prev.filter((entry) => entry.id !== id);
+      localStorage.setItem('journalEntries', JSON.stringify(updated));
+      return updated;
+    });
+
+    // Sync to cloud if available
+    if (isConfigured && user) {
+      try {
+        setIsSyncing(true);
+        const result = await journalService.delete(id);
+        if (result.error) throw new Error(result.error);
+      } catch (err) {
+        console.error('Error syncing journal delete:', err);
+        setSyncError(err.message);
+      } finally {
+        setIsSyncing(false);
+      }
+    }
+  };
+
+  // Life Score operations
+  const saveLifeScoreData = async (data) => {
+    // Optimistic update
+    setLifeScoreData(data);
+    localStorage.setItem('lifeScoreData', JSON.stringify(data));
+
+    // Sync to cloud if available
+    if (isConfigured && user && data.current) {
+      try {
+        setIsSyncing(true);
+        // Check if we're updating an existing score or creating new
+        if (data.current.id) {
+          const result = await lifeScoreService.update(data.current.id, transformLifeScoreToDB(data.current));
+          if (result.error) throw new Error(result.error);
+        } else {
+          const result = await lifeScoreService.create(transformLifeScoreToDB(data.current), user.id);
+          if (result.error) throw new Error(result.error);
+          // Update with cloud-generated ID
+          if (result.data) {
+            setLifeScoreData((prev) => ({
+              ...prev,
+              current: { ...prev.current, id: result.data.id },
+            }));
+          }
+        }
+      } catch (err) {
+        console.error('Error syncing life score:', err);
+        setSyncError(err.message);
+      } finally {
+        setIsSyncing(false);
+      }
+    }
+  };
+
+  // Weekly Planning operations
+  const saveWeeklyPlanningData = async (data) => {
+    // Optimistic update
+    setWeeklyPlanningData(data);
+    localStorage.setItem('weeklyPlanningData', JSON.stringify(data));
+
+    // Sync to cloud if available - sync the most recent plan
+    if (isConfigured && user && Array.isArray(data) && data.length > 0) {
+      const latestPlan = data[data.length - 1];
+      try {
+        setIsSyncing(true);
+        if (latestPlan.id) {
+          const result = await weeklyPlanService.update(latestPlan.id, transformWeeklyPlanToDB(latestPlan));
+          if (result.error) throw new Error(result.error);
+        } else {
+          const result = await weeklyPlanService.create(transformWeeklyPlanToDB(latestPlan), user.id);
+          if (result.error) throw new Error(result.error);
+          // Update with cloud-generated ID
+          if (result.data) {
+            setWeeklyPlanningData((prev) =>
+              prev.map((p, i) => (i === prev.length - 1 ? { ...p, id: result.data.id } : p))
+            );
+          }
+        }
+      } catch (err) {
+        console.error('Error syncing weekly plan:', err);
+        setSyncError(err.message);
+      } finally {
+        setIsSyncing(false);
+      }
+    }
+  };
+
+  // Get tasks linked to a specific goal
+  const getTasksForGoal = (goalId) => {
+    return tasks.filter((task) => task.linkedGoalId === goalId);
+  };
+
+  // Create a task linked to a goal
+  const createTaskForGoal = async (goalId, taskData) => {
+    const goal = goals.find((g) => g.id === goalId);
+    const newTask = await addTask({
+      ...taskData,
+      linkedGoalId: goalId,
+      title: taskData.title || `Task for: ${goal?.title || 'Goal'}`,
+      type: taskData.type || 'task',
+      priority: taskData.priority || goal?.priority || 'medium',
+      scheduledDate: taskData.scheduledDate || new Date().toISOString(),
+    });
+    return newTask;
   };
 
   const value = {
@@ -787,6 +1146,30 @@ export function AppProvider({ children }) {
     setShowNotificationCenter,
     notificationSettings,
     saveNotificationSettings,
+
+    // Journal
+    showJournal,
+    setShowJournal,
+    journalEntries,
+    addJournalEntry,
+    updateJournalEntry,
+    deleteJournalEntry,
+
+    // Life Score
+    showLifeScore,
+    setShowLifeScore,
+    lifeScoreData,
+    saveLifeScoreData,
+
+    // Weekly Planning
+    showWeeklyPlanning,
+    setShowWeeklyPlanning,
+    weeklyPlanningData,
+    saveWeeklyPlanningData,
+
+    // Goal-Task connection
+    getTasksForGoal,
+    createTaskForGoal,
 
     // Celebration
     celebration,
