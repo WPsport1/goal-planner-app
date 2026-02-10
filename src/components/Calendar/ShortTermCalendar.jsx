@@ -24,6 +24,12 @@ import {
   ChevronRight,
   Calendar as CalendarIcon,
   Clock,
+  X,
+  Save,
+  Trash2,
+  Bell,
+  Repeat,
+  Plus,
 } from 'lucide-react';
 import './ShortTermCalendar.css';
 
@@ -33,16 +39,18 @@ const viewOptions = [
   { id: 'month', label: 'Month' },
 ];
 
-// Generate time slots for 24 hours in 15-minute increments
+// Generate time slots for 24 hours in 1-minute increments (display every 15 min)
 const generateTimeSlots = () => {
   const slots = [];
   for (let hour = 0; hour < 24; hour++) {
-    for (let minute = 0; minute < 60; minute += 15) {
+    for (let minute = 0; minute < 60; minute += 1) {
       slots.push({
         hour,
         minute,
         label: `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`,
         displayLabel: minute === 0 ? format(setHours(setMinutes(new Date(), minute), hour), 'h a') : '',
+        isHourMark: minute === 0,
+        is15MinMark: minute % 15 === 0,
       });
     }
   }
@@ -50,22 +58,67 @@ const generateTimeSlots = () => {
 };
 
 const TIME_SLOTS = generateTimeSlots();
-const SLOT_HEIGHT = 20; // Height per 15-min slot in pixels
+const SLOT_HEIGHT = 1; // Height per 1-min slot in pixels (60px per hour)
+const HOUR_HEIGHT = 60; // Pixels per hour
+
+// Recurrence options
+const recurrenceOptions = [
+  { value: 'none', label: 'Does not repeat' },
+  { value: 'daily', label: 'Daily' },
+  { value: 'weekdays', label: 'Weekdays (Mon-Fri)' },
+  { value: 'weekly', label: 'Weekly' },
+  { value: 'biweekly', label: 'Every 2 weeks' },
+  { value: 'monthly', label: 'Monthly' },
+  { value: 'yearly', label: 'Yearly' },
+  { value: 'custom', label: 'Custom...' },
+];
+
+// Task type options
+const taskTypeOptions = [
+  { value: 'task', label: 'Task' },
+  { value: 'appointment', label: 'Appointment' },
+  { value: 'habit', label: 'Habit' },
+  { value: 'routine', label: 'Routine' },
+];
 
 export default function ShortTermCalendar() {
-  const { tasks, openDetail } = useApp();
+  const { tasks, addTask, updateTask, deleteTask, openDetail } = useApp();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState('day');
   const [currentTime, setCurrentTime] = useState(new Date());
   const calendarRef = useRef(null);
   const timeIndicatorRef = useRef(null);
 
+  // Modal state for creating/editing events
+  const [showEventModal, setShowEventModal] = useState(false);
+  const [editingTask, setEditingTask] = useState(null);
+  const [eventForm, setEventForm] = useState({
+    title: '',
+    description: '',
+    type: 'task',
+    priority: 'medium',
+    scheduledDate: '',
+    startTime: '09:00',
+    endTime: '10:00',
+    recurrence: 'none',
+    customRecurrence: {
+      frequency: 'weekly',
+      interval: 1,
+      daysOfWeek: [],
+      endType: 'never',
+      endDate: '',
+      endCount: 10,
+    },
+    reminder: false,
+    reminderMinutes: 15,
+  });
+  const [showCustomRecurrence, setShowCustomRecurrence] = useState(false);
+
   // Update current time every minute
   useEffect(() => {
     const timer = setInterval(() => {
       setCurrentTime(new Date());
-    }, 60000); // Update every minute
-
+    }, 60000);
     return () => clearInterval(timer);
   }, []);
 
@@ -73,7 +126,7 @@ export default function ShortTermCalendar() {
   useEffect(() => {
     if (timeIndicatorRef.current && calendarRef.current) {
       const indicatorTop = timeIndicatorRef.current.offsetTop;
-      calendarRef.current.scrollTop = indicatorTop - 200; // Scroll to show time indicator with some padding
+      calendarRef.current.scrollTop = indicatorTop - 200;
     }
   }, [view, currentDate]);
 
@@ -119,19 +172,19 @@ export default function ShortTermCalendar() {
     });
   };
 
-  // Calculate task position and height based on time
+  // Calculate task position and height based on time (1-minute precision)
   const getTaskStyle = (task) => {
     if (!task.startTime || !task.endTime) return {};
 
     const [startHour, startMinute] = task.startTime.split(':').map(Number);
     const [endHour, endMinute] = task.endTime.split(':').map(Number);
 
-    const startSlot = startHour * 4 + Math.floor(startMinute / 15);
-    const endSlot = endHour * 4 + Math.floor(endMinute / 15);
-    const duration = Math.max(1, endSlot - startSlot);
+    const startMinutes = startHour * 60 + startMinute;
+    const endMinutes = endHour * 60 + endMinute;
+    const duration = Math.max(15, endMinutes - startMinutes); // Minimum 15 min display
 
     return {
-      top: `${startSlot * SLOT_HEIGHT}px`,
+      top: `${startMinutes * SLOT_HEIGHT}px`,
       height: `${duration * SLOT_HEIGHT - 2}px`,
     };
   };
@@ -141,7 +194,7 @@ export default function ShortTermCalendar() {
     const hours = currentTime.getHours();
     const minutes = currentTime.getMinutes();
     const totalMinutes = hours * 60 + minutes;
-    return (totalMinutes / 15) * SLOT_HEIGHT;
+    return totalMinutes * SLOT_HEIGHT;
   };
 
   // Get header text based on view
@@ -173,6 +226,106 @@ export default function ShortTermCalendar() {
     return eachDayOfInterval({ start, end });
   }, [currentDate]);
 
+  // Handle click on empty calendar slot to create new event
+  const handleSlotClick = (date, e) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickY = e.clientY - rect.top + (calendarRef.current?.scrollTop || 0);
+    const totalMinutes = Math.floor(clickY / SLOT_HEIGHT);
+    const hour = Math.floor(totalMinutes / 60);
+    const minute = Math.round((totalMinutes % 60) / 5) * 5; // Round to nearest 5 min
+
+    const startTime = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+    const endHour = hour + 1;
+    const endTime = `${endHour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+
+    setEditingTask(null);
+    setEventForm({
+      title: '',
+      description: '',
+      type: 'task',
+      priority: 'medium',
+      scheduledDate: format(date, 'yyyy-MM-dd'),
+      startTime,
+      endTime,
+      recurrence: 'none',
+      customRecurrence: {
+        frequency: 'weekly',
+        interval: 1,
+        daysOfWeek: [],
+        endType: 'never',
+        endDate: '',
+        endCount: 10,
+      },
+      reminder: false,
+      reminderMinutes: 15,
+    });
+    setShowEventModal(true);
+  };
+
+  // Handle click on existing task to edit
+  const handleTaskClick = (task, e) => {
+    e.stopPropagation();
+    setEditingTask(task);
+    setEventForm({
+      title: task.title || '',
+      description: task.description || '',
+      type: task.type || 'task',
+      priority: task.priority || 'medium',
+      scheduledDate: task.scheduledDate ? format(parseISO(task.scheduledDate), 'yyyy-MM-dd') : '',
+      startTime: task.startTime || '09:00',
+      endTime: task.endTime || '10:00',
+      recurrence: task.recurrence || 'none',
+      customRecurrence: task.customRecurrence || {
+        frequency: 'weekly',
+        interval: 1,
+        daysOfWeek: [],
+        endType: 'never',
+        endDate: '',
+        endCount: 10,
+      },
+      reminder: task.reminder || false,
+      reminderMinutes: task.reminderMinutes || 15,
+    });
+    setShowEventModal(true);
+  };
+
+  // Save event (create or update)
+  const handleSaveEvent = () => {
+    if (!eventForm.title.trim()) return;
+
+    const eventData = {
+      title: eventForm.title,
+      description: eventForm.description,
+      type: eventForm.type,
+      priority: eventForm.priority,
+      scheduledDate: new Date(`${eventForm.scheduledDate}T${eventForm.startTime}`).toISOString(),
+      startTime: eventForm.startTime,
+      endTime: eventForm.endTime,
+      recurrence: eventForm.recurrence,
+      customRecurrence: eventForm.recurrence === 'custom' ? eventForm.customRecurrence : null,
+      reminder: eventForm.reminder,
+      reminderMinutes: eventForm.reminderMinutes,
+    };
+
+    if (editingTask) {
+      updateTask(editingTask.id, eventData);
+    } else {
+      addTask(eventData);
+    }
+
+    setShowEventModal(false);
+    setEditingTask(null);
+  };
+
+  // Delete event
+  const handleDeleteEvent = () => {
+    if (editingTask) {
+      deleteTask(editingTask.id);
+      setShowEventModal(false);
+      setEditingTask(null);
+    }
+  };
+
   // Render time grid with tasks
   const renderTimeGrid = (dates, showTimeColumn = true) => {
     const isMultiDay = dates.length > 1;
@@ -183,13 +336,13 @@ export default function ShortTermCalendar() {
           {/* Time labels column */}
           {showTimeColumn && (
             <div className="time-labels">
-              {TIME_SLOTS.map((slot, idx) => (
+              {Array.from({ length: 24 }, (_, hour) => (
                 <div
-                  key={idx}
+                  key={hour}
                   className="time-label"
-                  style={{ height: SLOT_HEIGHT }}
+                  style={{ height: HOUR_HEIGHT }}
                 >
-                  {slot.displayLabel}
+                  {format(setHours(new Date(), hour), 'h a')}
                 </div>
               ))}
             </div>
@@ -210,14 +363,23 @@ export default function ShortTermCalendar() {
                   </div>
                 )}
 
-                {/* Time slots */}
-                <div className="day-slots">
-                  {TIME_SLOTS.map((slot, idx) => (
+                {/* Time slots - clickable area */}
+                <div
+                  className="day-slots"
+                  onClick={(e) => handleSlotClick(date, e)}
+                >
+                  {/* Hour lines */}
+                  {Array.from({ length: 24 }, (_, hour) => (
                     <div
-                      key={idx}
-                      className={`time-slot ${slot.minute === 0 ? 'hour-start' : ''}`}
-                      style={{ height: SLOT_HEIGHT }}
-                    />
+                      key={hour}
+                      className="hour-slot"
+                      style={{ height: HOUR_HEIGHT }}
+                    >
+                      {/* 15-minute sub-lines */}
+                      <div className="quarter-line q1" />
+                      <div className="quarter-line q2" />
+                      <div className="quarter-line q3" />
+                    </div>
                   ))}
 
                   {/* Current time indicator */}
@@ -236,13 +398,16 @@ export default function ShortTermCalendar() {
                   {dayTasks.map((task) => (
                     <div
                       key={task.id}
-                      className={`calendar-task priority-${task.priority} ${task.completed ? 'completed' : ''}`}
+                      className={`calendar-task priority-${task.priority} type-${task.type} ${task.completed ? 'completed' : ''}`}
                       style={getTaskStyle(task)}
-                      onClick={() => openDetail(task)}
+                      onClick={(e) => handleTaskClick(task, e)}
                       title={`${task.title} (${task.startTime} - ${task.endTime})`}
                     >
                       <span className="task-time">{task.startTime}</span>
                       <span className="task-title">{task.title}</span>
+                      {task.recurrence && task.recurrence !== 'none' && (
+                        <Repeat size={10} className="task-recurrence-icon" />
+                      )}
                     </div>
                   ))}
                 </div>
@@ -295,8 +460,12 @@ export default function ShortTermCalendar() {
                   {dayTasks.slice(0, 3).map((task) => (
                     <div
                       key={task.id}
-                      className={`task-indicator priority-${task.priority}`}
+                      className={`task-indicator priority-${task.priority} type-${task.type}`}
                       title={task.title}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleTaskClick(task, e);
+                      }}
                     >
                       <Clock size={8} />
                       <span>{task.startTime}</span>
@@ -309,6 +478,319 @@ export default function ShortTermCalendar() {
               </div>
             );
           })}
+        </div>
+      </div>
+    );
+  };
+
+  // Render event modal
+  const renderEventModal = () => {
+    if (!showEventModal) return null;
+
+    return (
+      <div className="event-modal-overlay" onClick={() => setShowEventModal(false)}>
+        <div className="event-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="event-modal-header">
+            <h3>{editingTask ? 'Edit Event' : 'New Event'}</h3>
+            <button className="close-btn" onClick={() => setShowEventModal(false)}>
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="event-modal-body">
+            {/* Title */}
+            <div className="form-group">
+              <label>Title</label>
+              <input
+                type="text"
+                value={eventForm.title}
+                onChange={(e) => setEventForm({ ...eventForm, title: e.target.value })}
+                placeholder="Enter event title..."
+                autoFocus
+              />
+            </div>
+
+            {/* Type & Priority */}
+            <div className="form-row">
+              <div className="form-group">
+                <label>Type</label>
+                <select
+                  value={eventForm.type}
+                  onChange={(e) => setEventForm({ ...eventForm, type: e.target.value })}
+                >
+                  {taskTypeOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="form-group">
+                <label>Priority</label>
+                <select
+                  value={eventForm.priority}
+                  onChange={(e) => setEventForm({ ...eventForm, priority: e.target.value })}
+                >
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Date */}
+            <div className="form-group">
+              <label>Date</label>
+              <input
+                type="date"
+                value={eventForm.scheduledDate}
+                onChange={(e) => setEventForm({ ...eventForm, scheduledDate: e.target.value })}
+              />
+            </div>
+
+            {/* Time */}
+            <div className="form-row">
+              <div className="form-group">
+                <label>Start Time</label>
+                <input
+                  type="time"
+                  value={eventForm.startTime}
+                  onChange={(e) => setEventForm({ ...eventForm, startTime: e.target.value })}
+                  step="60"
+                />
+              </div>
+              <div className="form-group">
+                <label>End Time</label>
+                <input
+                  type="time"
+                  value={eventForm.endTime}
+                  onChange={(e) => setEventForm({ ...eventForm, endTime: e.target.value })}
+                  step="60"
+                />
+              </div>
+            </div>
+
+            {/* Recurrence */}
+            <div className="form-group">
+              <label>Repeat</label>
+              <select
+                value={eventForm.recurrence}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setEventForm({ ...eventForm, recurrence: val });
+                  if (val === 'custom') {
+                    setShowCustomRecurrence(true);
+                  } else {
+                    setShowCustomRecurrence(false);
+                  }
+                }}
+              >
+                {recurrenceOptions.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Custom Recurrence */}
+            {showCustomRecurrence && (
+              <div className="custom-recurrence-section">
+                <div className="form-row">
+                  <div className="form-group">
+                    <label>Repeat every</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="99"
+                      value={eventForm.customRecurrence.interval}
+                      onChange={(e) =>
+                        setEventForm({
+                          ...eventForm,
+                          customRecurrence: {
+                            ...eventForm.customRecurrence,
+                            interval: parseInt(e.target.value) || 1,
+                          },
+                        })
+                      }
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label>&nbsp;</label>
+                    <select
+                      value={eventForm.customRecurrence.frequency}
+                      onChange={(e) =>
+                        setEventForm({
+                          ...eventForm,
+                          customRecurrence: {
+                            ...eventForm.customRecurrence,
+                            frequency: e.target.value,
+                          },
+                        })
+                      }
+                    >
+                      <option value="daily">Day(s)</option>
+                      <option value="weekly">Week(s)</option>
+                      <option value="monthly">Month(s)</option>
+                      <option value="yearly">Year(s)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Days of week for weekly recurrence */}
+                {eventForm.customRecurrence.frequency === 'weekly' && (
+                  <div className="form-group">
+                    <label>On days</label>
+                    <div className="days-of-week">
+                      {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => (
+                        <button
+                          key={day}
+                          type="button"
+                          className={`day-btn ${eventForm.customRecurrence.daysOfWeek.includes(idx) ? 'active' : ''}`}
+                          onClick={() => {
+                            const days = [...eventForm.customRecurrence.daysOfWeek];
+                            if (days.includes(idx)) {
+                              days.splice(days.indexOf(idx), 1);
+                            } else {
+                              days.push(idx);
+                            }
+                            setEventForm({
+                              ...eventForm,
+                              customRecurrence: {
+                                ...eventForm.customRecurrence,
+                                daysOfWeek: days,
+                              },
+                            });
+                          }}
+                        >
+                          {day.charAt(0)}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* End condition */}
+                <div className="form-group">
+                  <label>Ends</label>
+                  <select
+                    value={eventForm.customRecurrence.endType}
+                    onChange={(e) =>
+                      setEventForm({
+                        ...eventForm,
+                        customRecurrence: {
+                          ...eventForm.customRecurrence,
+                          endType: e.target.value,
+                        },
+                      })
+                    }
+                  >
+                    <option value="never">Never</option>
+                    <option value="date">On date</option>
+                    <option value="count">After occurrences</option>
+                  </select>
+                </div>
+
+                {eventForm.customRecurrence.endType === 'date' && (
+                  <div className="form-group">
+                    <label>End date</label>
+                    <input
+                      type="date"
+                      value={eventForm.customRecurrence.endDate}
+                      onChange={(e) =>
+                        setEventForm({
+                          ...eventForm,
+                          customRecurrence: {
+                            ...eventForm.customRecurrence,
+                            endDate: e.target.value,
+                          },
+                        })
+                      }
+                    />
+                  </div>
+                )}
+
+                {eventForm.customRecurrence.endType === 'count' && (
+                  <div className="form-group">
+                    <label>Number of occurrences</label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="999"
+                      value={eventForm.customRecurrence.endCount}
+                      onChange={(e) =>
+                        setEventForm({
+                          ...eventForm,
+                          customRecurrence: {
+                            ...eventForm.customRecurrence,
+                            endCount: parseInt(e.target.value) || 1,
+                          },
+                        })
+                      }
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Reminder */}
+            <div className="form-group reminder-group">
+              <label className="checkbox-label">
+                <input
+                  type="checkbox"
+                  checked={eventForm.reminder}
+                  onChange={(e) => setEventForm({ ...eventForm, reminder: e.target.checked })}
+                />
+                <Bell size={16} />
+                Reminder
+              </label>
+              {eventForm.reminder && (
+                <select
+                  value={eventForm.reminderMinutes}
+                  onChange={(e) =>
+                    setEventForm({ ...eventForm, reminderMinutes: parseInt(e.target.value) })
+                  }
+                >
+                  <option value={5}>5 minutes before</option>
+                  <option value={10}>10 minutes before</option>
+                  <option value={15}>15 minutes before</option>
+                  <option value={30}>30 minutes before</option>
+                  <option value={60}>1 hour before</option>
+                  <option value={120}>2 hours before</option>
+                  <option value={1440}>1 day before</option>
+                </select>
+              )}
+            </div>
+
+            {/* Description */}
+            <div className="form-group">
+              <label>Description (optional)</label>
+              <textarea
+                value={eventForm.description}
+                onChange={(e) => setEventForm({ ...eventForm, description: e.target.value })}
+                placeholder="Add notes or details..."
+                rows={3}
+              />
+            </div>
+          </div>
+
+          <div className="event-modal-footer">
+            {editingTask && (
+              <button className="delete-btn" onClick={handleDeleteEvent}>
+                <Trash2 size={16} />
+                Delete
+              </button>
+            )}
+            <div className="footer-right">
+              <button className="cancel-btn" onClick={() => setShowEventModal(false)}>
+                Cancel
+              </button>
+              <button className="save-btn" onClick={handleSaveEvent}>
+                <Save size={16} />
+                {editingTask ? 'Update' : 'Create'}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     );
@@ -336,6 +818,20 @@ export default function ShortTermCalendar() {
           <button className="today-btn" onClick={goToToday}>
             <CalendarIcon size={14} />
             Today
+          </button>
+          <button
+            className="add-event-btn"
+            onClick={() => {
+              setEditingTask(null);
+              setEventForm({
+                ...eventForm,
+                scheduledDate: format(currentDate, 'yyyy-MM-dd'),
+              });
+              setShowEventModal(true);
+            }}
+          >
+            <Plus size={14} />
+            Add
           </button>
           <div className="view-selector">
             {viewOptions.map((option) => (
@@ -377,6 +873,9 @@ export default function ShortTermCalendar() {
           <span>Now</span>
         </div>
       </div>
+
+      {/* Event Modal */}
+      {renderEventModal()}
     </div>
   );
 }

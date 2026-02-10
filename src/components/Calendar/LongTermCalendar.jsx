@@ -26,6 +26,8 @@ import {
   ChevronRight,
   Calendar as CalendarIcon,
   Target,
+  X,
+  ZoomIn,
 } from 'lucide-react';
 import './LongTermCalendar.css';
 
@@ -40,6 +42,10 @@ export default function LongTermCalendar() {
   const { goals, openDetail } = useApp();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState('month');
+
+  // Day detail modal state
+  const [selectedDay, setSelectedDay] = useState(null);
+  const [showDayModal, setShowDayModal] = useState(false);
 
   // Navigation handlers
   const navigatePrev = () => {
@@ -112,7 +118,25 @@ export default function LongTermCalendar() {
     }
   };
 
-  // Render month view
+  // Handle day click to show zoomed view
+  const handleDayClick = (day, dayGoals) => {
+    setSelectedDay({ date: day, goals: dayGoals });
+    setShowDayModal(true);
+  };
+
+  // Handle month click in quarter/semi/year views
+  const handleMonthClick = (monthDate) => {
+    setCurrentDate(monthDate);
+    setView('month');
+  };
+
+  // Truncate text for small displays
+  const truncateText = (text, maxLength) => {
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '...';
+  };
+
+  // Render month view with fixed cell sizes
   const renderMonthView = () => {
     const monthStart = startOfMonth(currentDate);
     const monthEnd = endOfMonth(monthStart);
@@ -145,25 +169,33 @@ export default function LongTermCalendar() {
             return (
               <div
                 key={idx}
-                className={`calendar-day ${!isCurrentMonth ? 'other-month' : ''} ${today ? 'today' : ''}`}
+                className={`calendar-day ${!isCurrentMonth ? 'other-month' : ''} ${today ? 'today' : ''} ${dayGoals.length > 0 ? 'has-goals' : ''}`}
+                onClick={() => handleDayClick(day, dayGoals)}
               >
                 <span className="day-number">{format(day, 'd')}</span>
                 <div className="day-goals">
-                  {dayGoals.slice(0, 3).map((goal) => (
+                  {dayGoals.slice(0, 2).map((goal) => (
                     <div
                       key={goal.id}
                       className={`goal-chip priority-${goal.priority}`}
-                      onClick={() => openDetail(goal)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openDetail(goal);
+                      }}
                       title={goal.title}
                     >
-                      <Target size={10} />
-                      <span>{goal.title}</span>
+                      <span className="goal-text">{truncateText(goal.title, 12)}</span>
                     </div>
                   ))}
-                  {dayGoals.length > 3 && (
-                    <div className="more-goals">+{dayGoals.length - 3} more</div>
+                  {dayGoals.length > 2 && (
+                    <div className="more-goals">+{dayGoals.length - 2}</div>
                   )}
                 </div>
+                {dayGoals.length > 0 && (
+                  <button className="zoom-btn" title="View all goals">
+                    <ZoomIn size={12} />
+                  </button>
+                )}
               </div>
             );
           })}
@@ -172,7 +204,7 @@ export default function LongTermCalendar() {
     );
   };
 
-  // Render quarter view (3 months)
+  // Render quarter view (3 months) - compact with click to zoom
   const renderQuarterView = () => {
     const quarterStart = startOfQuarter(currentDate);
     const quarterEnd = endOfQuarter(quarterStart);
@@ -180,40 +212,54 @@ export default function LongTermCalendar() {
 
     return (
       <div className="calendar-quarter-view">
-        {months.map((month) => (
-          <div key={month.toISOString()} className="quarter-month">
-            <h4>{format(month, 'MMMM')}</h4>
-            <div className="month-goals">
-              {getGoalsForMonth(month).map((goal) => (
-                <div
-                  key={goal.id}
-                  className={`goal-bar priority-${goal.priority}`}
-                  onClick={() => openDetail(goal)}
-                >
-                  <Target size={12} />
-                  <span className="goal-title">{goal.title}</span>
-                  <span className="goal-date">
-                    {format(parseISO(goal.targetDate), 'MMM d')}
-                  </span>
-                  <div className="goal-progress-mini">
-                    <div
-                      className="progress-fill"
-                      style={{ width: `${goal.progress}%` }}
-                    />
+        {months.map((month) => {
+          const monthGoals = getGoalsForMonth(month);
+          const isCurrentMonth = isSameMonth(month, new Date());
+
+          return (
+            <div
+              key={month.toISOString()}
+              className={`quarter-month ${isCurrentMonth ? 'current' : ''}`}
+              onClick={() => handleMonthClick(month)}
+            >
+              <div className="quarter-month-header">
+                <h4>{format(month, 'MMMM')}</h4>
+                <span className="goal-count">{monthGoals.length} goals</span>
+              </div>
+              <div className="month-goals-compact">
+                {monthGoals.slice(0, 4).map((goal) => (
+                  <div
+                    key={goal.id}
+                    className={`goal-bar-compact priority-${goal.priority}`}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openDetail(goal);
+                    }}
+                    title={goal.title}
+                  >
+                    <Target size={10} />
+                    <span className="goal-title">{truncateText(goal.title, 20)}</span>
+                    <span className="goal-date">{format(parseISO(goal.targetDate), 'd')}</span>
                   </div>
-                </div>
-              ))}
-              {getGoalsForMonth(month).length === 0 && (
-                <div className="no-goals">No goals this month</div>
-              )}
+                ))}
+                {monthGoals.length > 4 && (
+                  <div className="more-goals-compact">
+                    +{monthGoals.length - 4} more goals
+                  </div>
+                )}
+                {monthGoals.length === 0 && (
+                  <div className="no-goals">No goals</div>
+                )}
+              </div>
+              <div className="click-hint">Click to view month</div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   };
 
-  // Render semi-annual view (6 months)
+  // Render semi-annual view (6 months) - more compact
   const renderSemiAnnualView = () => {
     const halfStart = currentDate.getMonth() < 6
       ? startOfYear(currentDate)
@@ -225,24 +271,40 @@ export default function LongTermCalendar() {
       <div className="calendar-semi-annual-view">
         {months.map((month) => {
           const monthGoals = getGoalsForMonth(month);
+          const isCurrentMonth = isSameMonth(month, new Date());
+
           return (
-            <div key={month.toISOString()} className="semi-month">
+            <div
+              key={month.toISOString()}
+              className={`semi-month ${isCurrentMonth ? 'current' : ''}`}
+              onClick={() => handleMonthClick(month)}
+            >
               <div className="semi-month-header">
                 <span className="month-name">{format(month, 'MMM')}</span>
                 <span className="goal-count">{monthGoals.length}</span>
               </div>
               <div className="semi-month-goals">
-                {monthGoals.slice(0, 2).map((goal) => (
+                {monthGoals.slice(0, 3).map((goal) => (
                   <div
                     key={goal.id}
                     className={`goal-dot priority-${goal.priority}`}
-                    onClick={() => openDetail(goal)}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openDetail(goal);
+                    }}
                     title={goal.title}
                   />
                 ))}
-                {monthGoals.length > 2 && (
-                  <span className="more">+{monthGoals.length - 2}</span>
+                {monthGoals.length > 3 && (
+                  <span className="more">+{monthGoals.length - 3}</span>
                 )}
+              </div>
+              <div className="semi-goals-preview">
+                {monthGoals.slice(0, 2).map((goal) => (
+                  <div key={goal.id} className="goal-preview" title={goal.title}>
+                    {truncateText(goal.title, 10)}
+                  </div>
+                ))}
               </div>
             </div>
           );
@@ -251,7 +313,7 @@ export default function LongTermCalendar() {
     );
   };
 
-  // Render year view (12 months)
+  // Render year view (12 months) - most compact
   const renderYearView = () => {
     const yearStart = startOfYear(currentDate);
     const yearEnd = endOfYear(currentDate);
@@ -267,28 +329,97 @@ export default function LongTermCalendar() {
             <div
               key={month.toISOString()}
               className={`year-month ${isCurrentMonth ? 'current' : ''}`}
+              onClick={() => handleMonthClick(month)}
             >
               <div className="year-month-header">
                 <span>{format(month, 'MMM')}</span>
               </div>
               <div className="year-month-body">
                 <div className="goal-indicators">
-                  {monthGoals.slice(0, 4).map((goal) => (
+                  {monthGoals.slice(0, 6).map((goal) => (
                     <div
                       key={goal.id}
                       className={`goal-indicator priority-${goal.priority}`}
-                      onClick={() => openDetail(goal)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openDetail(goal);
+                      }}
                       title={goal.title}
                     />
                   ))}
                 </div>
                 {monthGoals.length > 0 && (
-                  <span className="goal-count">{monthGoals.length} goals</span>
+                  <span className="goal-count">{monthGoals.length}</span>
                 )}
               </div>
             </div>
           );
         })}
+      </div>
+    );
+  };
+
+  // Render day detail modal
+  const renderDayModal = () => {
+    if (!showDayModal || !selectedDay) return null;
+
+    return (
+      <div className="day-modal-overlay" onClick={() => setShowDayModal(false)}>
+        <div className="day-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="day-modal-header">
+            <div className="header-info">
+              <h3>{format(selectedDay.date, 'EEEE')}</h3>
+              <span className="date-full">{format(selectedDay.date, 'MMMM d, yyyy')}</span>
+            </div>
+            <button className="close-btn" onClick={() => setShowDayModal(false)}>
+              <X size={20} />
+            </button>
+          </div>
+
+          <div className="day-modal-body">
+            {selectedDay.goals.length === 0 ? (
+              <div className="no-goals-message">
+                <Target size={48} />
+                <p>No goals due on this day</p>
+              </div>
+            ) : (
+              <div className="goals-list">
+                <h4>{selectedDay.goals.length} Goal{selectedDay.goals.length !== 1 ? 's' : ''} Due</h4>
+                {selectedDay.goals.map((goal) => (
+                  <div
+                    key={goal.id}
+                    className={`goal-card priority-${goal.priority}`}
+                    onClick={() => {
+                      setShowDayModal(false);
+                      openDetail(goal);
+                    }}
+                  >
+                    <div className="goal-card-header">
+                      <Target size={16} />
+                      <h5>{goal.title}</h5>
+                    </div>
+                    {goal.description && (
+                      <p className="goal-description">{goal.description}</p>
+                    )}
+                    <div className="goal-card-footer">
+                      <span className={`priority-badge ${goal.priority}`}>
+                        {goal.priority}
+                      </span>
+                      <span className="status-badge">{goal.status}</span>
+                      <div className="progress-bar">
+                        <div
+                          className="progress-fill"
+                          style={{ width: `${goal.progress || 0}%` }}
+                        />
+                      </div>
+                      <span className="progress-text">{goal.progress || 0}%</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
       </div>
     );
   };
@@ -348,7 +479,14 @@ export default function LongTermCalendar() {
           <span className="legend-dot low"></span>
           <span>Low Priority</span>
         </div>
+        <div className="legend-hint">
+          <ZoomIn size={12} />
+          <span>Click to zoom</span>
+        </div>
       </div>
+
+      {/* Day Detail Modal */}
+      {renderDayModal()}
     </div>
   );
 }
