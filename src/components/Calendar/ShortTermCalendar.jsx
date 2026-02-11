@@ -30,6 +30,10 @@ import {
   Bell,
   Repeat,
   Plus,
+  Sun,
+  Moon,
+  CheckCircle2,
+  Circle,
 } from 'lucide-react';
 import './ShortTermCalendar.css';
 
@@ -82,12 +86,54 @@ const taskTypeOptions = [
 ];
 
 export default function ShortTermCalendar() {
-  const { tasks, addTask, updateTask, deleteTask, openDetail } = useApp();
+  const { tasks, addTask, updateTask, deleteTask, openDetail, toggleTaskComplete } = useApp();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState('day');
   const [currentTime, setCurrentTime] = useState(new Date());
   const calendarRef = useRef(null);
   const timeIndicatorRef = useRef(null);
+
+  // Routine progress tracking for today
+  const todayRoutineTasks = useMemo(() => {
+    const todayStr = format(new Date(), 'yyyy-MM-dd');
+    return tasks.filter(
+      (t) => t.type === 'routine' && t.scheduledDate && t.scheduledDate.startsWith(todayStr)
+    );
+  }, [tasks]);
+
+  const routineProgress = useMemo(() => {
+    if (todayRoutineTasks.length === 0) return null;
+    const completed = todayRoutineTasks.filter((t) => t.completed).length;
+    const total = todayRoutineTasks.length;
+    const percentage = Math.round((completed / total) * 100);
+
+    // Find current/next routine task
+    const now = new Date();
+    const currentHour = now.getHours();
+    const currentMinute = now.getMinutes();
+    const currentMinutes = currentHour * 60 + currentMinute;
+
+    let currentTask = null;
+    let nextTask = null;
+
+    for (const task of todayRoutineTasks) {
+      if (task.completed) continue;
+      if (!task.startTime || !task.endTime) continue;
+
+      const [startH, startM] = task.startTime.split(':').map(Number);
+      const [endH, endM] = task.endTime.split(':').map(Number);
+      const startMinutes = startH * 60 + startM;
+      const endMinutes = endH * 60 + endM;
+
+      if (currentMinutes >= startMinutes && currentMinutes < endMinutes) {
+        currentTask = task;
+      } else if (currentMinutes < startMinutes && !nextTask) {
+        nextTask = task;
+      }
+    }
+
+    return { completed, total, percentage, currentTask, nextTask };
+  }, [todayRoutineTasks]);
 
   // Modal state for creating/editing events
   const [showEventModal, setShowEventModal] = useState(false);
@@ -403,8 +449,22 @@ export default function ShortTermCalendar() {
                       onClick={(e) => handleTaskClick(task, e)}
                       title={`${task.title} (${task.startTime} - ${task.endTime})`}
                     >
+                      {task.type === 'routine' && (
+                        <span
+                          className="routine-task-check"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleTaskComplete(task.id);
+                          }}
+                        >
+                          {task.completed ? <CheckCircle2 size={12} /> : <Circle size={12} />}
+                        </span>
+                      )}
                       <span className="task-time">{task.startTime}</span>
                       <span className="task-title">{task.title}</span>
+                      {task.type === 'routine' && task.reminder && (
+                        <Bell size={9} className="task-reminder-icon" />
+                      )}
                       {task.recurrence && task.recurrence !== 'none' && (
                         <Repeat size={10} className="task-recurrence-icon" />
                       )}
@@ -846,6 +906,56 @@ export default function ShortTermCalendar() {
           </div>
         </div>
       </div>
+
+      {/* Routine Progress Banner */}
+      {routineProgress && isToday(currentDate) && (
+        <div className="routine-progress-banner">
+          <div className="routine-banner-left">
+            <Sun size={16} />
+            <span className="routine-banner-title">Routine Progress</span>
+            <span className="routine-banner-count">
+              {routineProgress.completed}/{routineProgress.total} done
+            </span>
+          </div>
+          <div className="routine-progress-bar-container">
+            <div
+              className="routine-progress-bar-fill"
+              style={{ width: `${routineProgress.percentage}%` }}
+            />
+          </div>
+          <div className="routine-banner-right">
+            {routineProgress.percentage === 100 ? (
+              <span className="routine-complete-badge">
+                <CheckCircle2 size={14} />
+                All Done!
+              </span>
+            ) : routineProgress.currentTask ? (
+              <span className="routine-current-task">
+                <Bell size={12} className="pulse-icon" />
+                Now: {routineProgress.currentTask.title}
+              </span>
+            ) : routineProgress.nextTask ? (
+              <span className="routine-next-task">
+                Next: {routineProgress.nextTask.title} at {routineProgress.nextTask.startTime}
+              </span>
+            ) : null}
+          </div>
+          <div className="routine-checklist">
+            {todayRoutineTasks.map((task) => (
+              <button
+                key={task.id}
+                className={`routine-check-item ${task.completed ? 'checked' : ''}`}
+                onClick={() => toggleTaskComplete(task.id)}
+                title={task.title}
+              >
+                {task.completed ? <CheckCircle2 size={12} /> : <Circle size={12} />}
+                <span>{task.title}</span>
+                <span className="routine-check-time">{task.startTime}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Calendar Body */}
       <div className="calendar-body">
