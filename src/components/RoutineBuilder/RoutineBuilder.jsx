@@ -24,6 +24,8 @@ import {
   Copy,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
+  ChevronUp,
   Smartphone,
   Bath,
   Pill,
@@ -31,8 +33,15 @@ import {
   PenTool,
   Tv,
   Wind,
+  Calendar,
+  Bell,
+  Layers,
+  CopyPlus,
+  AlertCircle,
+  Circle,
 } from 'lucide-react';
-import { format, addMinutes, parse, getDay, getWeekOfMonth } from 'date-fns';
+import { format, addMinutes, addDays, parse, getDay, getWeekOfMonth, startOfWeek, isSameDay } from 'date-fns';
+import { createTaskReminder } from '../../services/notifications';
 import './RoutineBuilder.css';
 
 // Days of the week
@@ -79,6 +88,7 @@ export default function RoutineBuilder({ type = 'morning' }) {
     addTask,
     tasks,
     toggleTaskComplete,
+    notificationSettings,
   } = useApp();
 
   const isOpen = type === 'morning' ? showMorningRoutine : showNightRoutine;
@@ -99,6 +109,15 @@ export default function RoutineBuilder({ type = 'morning' }) {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [copyFromVisible, setCopyFromVisible] = useState(false);
 
+  // Copy feature state
+  const [showCopyOptions, setShowCopyOptions] = useState(false); // Calendar copy per-item or 'full' for section
+  const [showCopyToRoutine, setShowCopyToRoutine] = useState(null); // Item ID
+  const [showCopyEntireRoutine, setShowCopyEntireRoutine] = useState(false);
+  const [copySuccess, setCopySuccess] = useState(null);
+  const [batchCopyMode, setBatchCopyMode] = useState(false);
+  const [batchCopyTargets, setBatchCopyTargets] = useState([]);
+  const [batchCopyItem, setBatchCopyItem] = useState(null);
+
   // Get the routine key for current selection
   const routineKey = `${type}_${selectedDay}_${selectedWeek}`;
 
@@ -109,12 +128,19 @@ export default function RoutineBuilder({ type = 'morning' }) {
       setStartTime(routines[routineKey].startTime || defaultTime);
       setIsEditing(false);
     } else {
-      // No routine for this day/week - start fresh or check for a template
       setRoutineItems([]);
       setStartTime(defaultTime);
       setIsEditing(true);
     }
   }, [routines, routineKey, defaultTime]);
+
+  // Auto-clear success message
+  useEffect(() => {
+    if (copySuccess) {
+      const timer = setTimeout(() => setCopySuccess(null), 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [copySuccess]);
 
   // Calculate end times for each item
   const calculateTimes = () => {
@@ -133,7 +159,6 @@ export default function RoutineBuilder({ type = 'morning' }) {
   const todayRoutineTasks = tasks.filter(
     (t) =>
       t.type === 'routine' &&
-      t.routineType === type &&
       t.scheduledDate &&
       t.scheduledDate.startsWith(format(new Date(), 'yyyy-MM-dd'))
   );
@@ -164,6 +189,9 @@ export default function RoutineBuilder({ type = 'morning' }) {
   const handleClose = () => {
     setIsOpen(false);
     setCopyFromVisible(false);
+    setBatchCopyMode(false);
+    setBatchCopyTargets([]);
+    setBatchCopyItem(null);
   };
 
   const addRoutineItem = (suggestion = null) => {
@@ -235,26 +263,297 @@ export default function RoutineBuilder({ type = 'morning' }) {
     setIsEditing(true);
   };
 
-  const handleStartRoutine = () => {
-    // Create tasks for today based on routine
-    const today = new Date().toISOString();
+  // ====== COPY ACTIVITY TO ANOTHER ROUTINE ======
+  const copyActivityToRoutine = (item, targetType, targetDay, targetVariant) => {
+    const targetKey = `${targetType}_${targetDay}_${targetVariant}`;
+    const targetRoutine = routines?.[targetKey] || { items: [], startTime: targetType === 'morning' ? '06:00' : '21:00' };
+
+    const alreadyExists = (targetRoutine.items || []).some(
+      (existing) => existing.title === item.title
+    );
+
+    if (alreadyExists) {
+      setCopySuccess(`"${item.title}" already exists in that routine`);
+      return;
+    }
+
+    const newItem = { ...item, id: Date.now().toString() };
+    delete newItem.startTime;
+    delete newItem.endTime;
+
+    saveRoutine(targetKey, {
+      ...targetRoutine,
+      items: [...(targetRoutine.items || []), newItem],
+      type: targetType,
+      dayOfWeek: targetDay,
+      weekVariant: targetVariant,
+    });
+
+    setShowCopyToRoutine(null);
+    setCopySuccess(`"${item.title}" copied to ${targetType} - ${targetDay.charAt(0).toUpperCase() + targetDay.slice(1)} (${targetVariant})`);
+  };
+
+  // ====== BATCH COPY ACTIVITY ======
+  const handleBatchCopyActivity = () => {
+    if (!batchCopyItem || batchCopyTargets.length === 0) return;
+
+    let copiedCount = 0;
+    let skippedCount = 0;
+
+    batchCopyTargets.forEach((target) => {
+      const targetKey = `${target.type}_${target.day}_${target.variant}`;
+      const targetRoutine = routines?.[targetKey] || { items: [], startTime: target.type === 'morning' ? '06:00' : '21:00' };
+
+      const alreadyExists = (targetRoutine.items || []).some(
+        (existing) => existing.title === batchCopyItem.title
+      );
+
+      if (alreadyExists) {
+        skippedCount++;
+        return;
+      }
+
+      const newItem = { ...batchCopyItem, id: (Date.now() + copiedCount).toString() };
+      delete newItem.startTime;
+      delete newItem.endTime;
+
+      saveRoutine(targetKey, {
+        ...targetRoutine,
+        items: [...(targetRoutine.items || []), newItem],
+        type: target.type,
+        dayOfWeek: target.day,
+        weekVariant: target.variant,
+      });
+
+      copiedCount++;
+    });
+
+    const itemTitle = batchCopyItem.title;
+    setBatchCopyMode(false);
+    setBatchCopyTargets([]);
+    setBatchCopyItem(null);
+    setCopySuccess(`"${itemTitle}" copied to ${copiedCount} routine(s)${skippedCount > 0 ? `, ${skippedCount} skipped (duplicates)` : ''}`);
+  };
+
+  const toggleBatchTarget = (targetType, day, variant) => {
+    const exists = batchCopyTargets.find(
+      (t) => t.type === targetType && t.day === day && t.variant === variant
+    );
+    if (exists) {
+      setBatchCopyTargets(batchCopyTargets.filter(
+        (t) => !(t.type === targetType && t.day === day && t.variant === variant)
+      ));
+    } else {
+      setBatchCopyTargets([...batchCopyTargets, { type: targetType, day, variant }]);
+    }
+  };
+
+  const isBatchTarget = (targetType, day, variant) => {
+    return batchCopyTargets.some(
+      (t) => t.type === targetType && t.day === day && t.variant === variant
+    );
+  };
+
+  const enterBatchCopyMode = (item) => {
+    setBatchCopyItem(item);
+    setBatchCopyMode(true);
+    setBatchCopyTargets([]);
+    setShowCopyToRoutine(null);
+  };
+
+  const selectAllDaysForWeek = (targetType, variant) => {
+    const targets = DAYS
+      .filter((day) => !(targetType === type && variant === selectedWeek && day === selectedDay))
+      .map((day) => ({ type: targetType, day, variant }));
+    setBatchCopyTargets(targets);
+  };
+
+  // ====== COPY ENTIRE ROUTINE TO ANOTHER SLOT ======
+  const copyEntireRoutineToSlot = (targetType, targetDay, targetVariant) => {
+    const targetKey = `${targetType}_${targetDay}_${targetVariant}`;
+    const copiedItems = routineItems.map((item, index) => {
+      const newItem = { ...item, id: (Date.now() + index).toString() };
+      delete newItem.startTime;
+      delete newItem.endTime;
+      return newItem;
+    });
+
+    saveRoutine(targetKey, {
+      items: copiedItems,
+      startTime,
+      type: targetType,
+      dayOfWeek: targetDay,
+      weekVariant: targetVariant,
+    });
+
+    setCopySuccess(`Entire routine copied to ${targetType} - ${targetDay.charAt(0).toUpperCase() + targetDay.slice(1)} (${targetVariant})`);
+    setShowCopyEntireRoutine(false);
+  };
+
+  const copyRoutineToAllDays = (targetType, targetVariant) => {
+    let copiedCount = 0;
+    DAYS.forEach((day) => {
+      if (targetType === type && targetVariant === selectedWeek && day === selectedDay) return;
+
+      const targetKey = `${targetType}_${day}_${targetVariant}`;
+      const copiedItems = routineItems.map((item, index) => {
+        const newItem = { ...item, id: (Date.now() + copiedCount * 100 + index).toString() };
+        delete newItem.startTime;
+        delete newItem.endTime;
+        return newItem;
+      });
+
+      saveRoutine(targetKey, {
+        items: copiedItems,
+        startTime,
+        type: targetType,
+        dayOfWeek: day,
+        weekVariant: targetVariant,
+      });
+      copiedCount++;
+    });
+
+    setCopySuccess(`Routine copied to ${copiedCount} days in Week ${targetVariant} (${targetType})`);
+    setShowCopyEntireRoutine(false);
+  };
+
+  // ====== COPY TO CALENDAR WITH NOTIFICATIONS ======
+  const copyActivityToCalendar = (item, targetDate, enableNotification = true) => {
+    const itemWithTime = itemsWithTimes.find(i => i.id === item.id);
+    const dateStr = format(targetDate, 'yyyy-MM-dd');
+
+    const alreadyExists = tasks.some(
+      (t) => t.title === item.title && t.type === 'routine' && t.scheduledDate && t.scheduledDate.startsWith(dateStr)
+    );
+
+    if (alreadyExists) {
+      setCopySuccess(`"${item.title}" already exists on ${format(targetDate, 'MMM d')}`);
+      return;
+    }
+
+    const taskData = {
+      title: item.title,
+      description: item.description,
+      type: 'routine',
+      routineType: type,
+      priority: 'medium',
+      scheduledDate: targetDate.toISOString(),
+      startTime: itemWithTime?.startTime || '09:00',
+      endTime: itemWithTime?.endTime || '09:30',
+      recurrence: 'none',
+      reminder: enableNotification,
+      reminderMinutes: notificationSettings?.taskReminderMinutes || 5,
+    };
+
+    addTask(taskData);
+
+    if (enableNotification) {
+      createTaskReminder(
+        { ...taskData, id: 'temp-' + Date.now(), scheduledDate: targetDate.toISOString() },
+        notificationSettings?.taskReminderMinutes || 5
+      );
+    }
+
+    setCopySuccess(`"${item.title}" added to ${format(targetDate, 'EEE, MMM d')} with notifications`);
+  };
+
+  const copyRoutineToDate = (targetDate, enableNotifications = true) => {
+    let copiedCount = 0;
+    let skippedCount = 0;
+
     itemsWithTimes.forEach((item) => {
-      // Check if task already exists for today
-      const existingTask = todayRoutineTasks.find((t) => t.title === item.title);
-      if (!existingTask) {
-        addTask({
-          title: item.title,
-          description: item.description,
-          type: 'routine',
-          routineType: type,
-          priority: 'medium',
-          scheduledDate: today,
-          startTime: item.startTime,
-          endTime: item.endTime,
-          recurrence: 'none', // Routines are day-specific, not recurring
+      const existingTask = tasks.find(
+        (t) => t.title === item.title && t.type === 'routine' && t.scheduledDate && isSameDay(new Date(t.scheduledDate), targetDate)
+      );
+
+      if (existingTask) { skippedCount++; return; }
+
+      const taskData = {
+        title: item.title,
+        description: item.description,
+        type: 'routine',
+        routineType: type,
+        priority: 'medium',
+        scheduledDate: targetDate.toISOString(),
+        startTime: item.startTime,
+        endTime: item.endTime,
+        recurrence: 'none',
+        reminder: enableNotifications,
+        reminderMinutes: notificationSettings?.taskReminderMinutes || 5,
+      };
+
+      addTask(taskData);
+
+      if (enableNotifications) {
+        createTaskReminder(
+          { ...taskData, id: 'temp-' + Date.now() + copiedCount, scheduledDate: targetDate.toISOString() },
+          notificationSettings?.taskReminderMinutes || 5
+        );
+      }
+      copiedCount++;
+    });
+
+    setCopySuccess(
+      `${copiedCount} activities added to ${format(targetDate, 'EEE, MMM d')}${skippedCount > 0 ? ` (${skippedCount} already existed)` : ''}`
+    );
+  };
+
+  const copyWeekRoutineToCalendar = (enableNotifications = true) => {
+    const weekStart = startOfWeek(new Date(), { weekStartsOn: 0 }); // Sunday
+    let totalCopied = 0;
+
+    DAYS.forEach((day, dayIndex) => {
+      const targetDate = addDays(weekStart, dayIndex);
+      const dayKey = `${type}_${day}_${selectedWeek}`;
+      const dayRoutine = routines?.[dayKey];
+
+      if (dayRoutine && dayRoutine.items && dayRoutine.items.length > 0) {
+        let currentTime = parse(dayRoutine.startTime || defaultTime, 'HH:mm', new Date());
+
+        dayRoutine.items.forEach((item) => {
+          const itemStartTime = format(currentTime, 'HH:mm');
+          currentTime = addMinutes(currentTime, item.duration);
+          const itemEndTime = format(currentTime, 'HH:mm');
+
+          const existingTask = tasks.find(
+            (t) => t.title === item.title && t.type === 'routine' && t.scheduledDate && isSameDay(new Date(t.scheduledDate), targetDate)
+          );
+
+          if (!existingTask) {
+            const taskData = {
+              title: item.title,
+              description: item.description,
+              type: 'routine',
+              routineType: type,
+              priority: 'medium',
+              scheduledDate: targetDate.toISOString(),
+              startTime: itemStartTime,
+              endTime: itemEndTime,
+              recurrence: 'none',
+              reminder: enableNotifications,
+              reminderMinutes: notificationSettings?.taskReminderMinutes || 5,
+            };
+
+            addTask(taskData);
+
+            if (enableNotifications) {
+              createTaskReminder(
+                { ...taskData, id: 'temp-' + Date.now() + totalCopied, scheduledDate: targetDate.toISOString() },
+                notificationSettings?.taskReminderMinutes || 5
+              );
+            }
+            totalCopied++;
+          }
         });
       }
     });
+
+    setShowCopyOptions(false);
+    setCopySuccess(`${totalCopied} activities copied to this week's calendar with notifications`);
+  };
+
+  const handleStartRoutine = () => {
+    copyRoutineToDate(new Date(), true);
     handleClose();
   };
 
@@ -278,6 +577,14 @@ export default function RoutineBuilder({ type = 'morning' }) {
     return format(end, 'h:mm a');
   };
 
+  const getUpcomingDays = () => {
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      days.push(addDays(new Date(), i));
+    }
+    return days;
+  };
+
   const Icon = type === 'morning' ? Sun : Moon;
   const headerGradient = type === 'morning'
     ? 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)'
@@ -297,9 +604,16 @@ export default function RoutineBuilder({ type = 'morning' }) {
           </button>
         </div>
 
+        {/* Success Toast */}
+        {copySuccess && (
+          <div className="copy-success-toast">
+            <CheckCircle2 size={16} />
+            <span>{copySuccess}</span>
+          </div>
+        )}
+
         {/* Day/Week Selector */}
         <div className="routine-selector">
-          {/* Week Selector */}
           <div className="week-selector">
             <span className="selector-label">Week:</span>
             <div className="week-buttons">
@@ -315,7 +629,6 @@ export default function RoutineBuilder({ type = 'morning' }) {
             </div>
           </div>
 
-          {/* Day Selector */}
           <div className="day-selector">
             <span className="selector-label">Day:</span>
             <div className="day-buttons">
@@ -335,7 +648,6 @@ export default function RoutineBuilder({ type = 'morning' }) {
             </div>
           </div>
 
-          {/* Current Selection Label */}
           <div className="current-selection">
             <span className="selection-label">
               {DAY_LABELS[DAYS.indexOf(selectedDay)]} - Week {selectedWeek}
@@ -371,6 +683,66 @@ export default function RoutineBuilder({ type = 'morning' }) {
           </div>
         </div>
 
+        {/* Batch Copy Mode Banner */}
+        {batchCopyMode && batchCopyItem && (
+          <div className="batch-copy-banner">
+            <div className="batch-copy-banner-info">
+              <CopyPlus size={16} />
+              <span>Select routines to copy "<strong>{batchCopyItem.title}</strong>" to:</span>
+            </div>
+            <div className="batch-copy-quick-select">
+              <span className="quick-select-label">Quick select:</span>
+              {WEEKS.map((variant) => (
+                <button key={variant} className="quick-select-btn" onClick={() => selectAllDaysForWeek(type, variant)}>
+                  All Week {variant}
+                </button>
+              ))}
+              <button className="quick-select-btn" onClick={() => selectAllDaysForWeek(type === 'morning' ? 'nighttime' : 'morning', selectedWeek)}>
+                All {type === 'morning' ? 'Nighttime' : 'Morning'} ({selectedWeek})
+              </button>
+            </div>
+            <div className="batch-target-grid">
+              {['morning', 'nighttime'].map((bType) => (
+                <div key={bType} className="batch-type-section">
+                  <h5>{bType === 'morning' ? 'Morning' : 'Nighttime'}</h5>
+                  {WEEKS.map((variant) => (
+                    <div key={variant} className="batch-variant-row">
+                      <span className="batch-variant-label">Wk {variant}</span>
+                      <div className="batch-day-buttons">
+                        {DAYS.map((day) => {
+                          const isCurrent = bType === type && variant === selectedWeek && day === selectedDay;
+                          const isSelected = isBatchTarget(bType, day, variant);
+                          return (
+                            <button
+                              key={`${bType}-${variant}-${day}`}
+                              className={`batch-day-btn ${isSelected ? 'selected' : ''} ${isCurrent ? 'current' : ''}`}
+                              onClick={() => !isCurrent && toggleBatchTarget(bType, day, variant)}
+                              disabled={isCurrent}
+                              title={isCurrent ? 'Current routine' : `${bType} - ${day} (${variant})`}
+                            >
+                              {day.slice(0, 2)}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+            <div className="batch-copy-actions">
+              <span className="batch-count">{batchCopyTargets.length} routine(s) selected</span>
+              <button className="batch-cancel-btn" onClick={() => { setBatchCopyMode(false); setBatchCopyTargets([]); setBatchCopyItem(null); }}>
+                Cancel
+              </button>
+              <button className="batch-confirm-btn" onClick={handleBatchCopyActivity} disabled={batchCopyTargets.length === 0}>
+                <CopyPlus size={14} />
+                Copy to {batchCopyTargets.length} Routine(s)
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Routine Content */}
         <div className="routine-content">
           {isEditing ? (
@@ -378,21 +750,14 @@ export default function RoutineBuilder({ type = 'morning' }) {
               {/* Copy From Button */}
               {availableRoutines.length > 0 && routineItems.length === 0 && (
                 <div className="copy-from-section">
-                  <button
-                    className="copy-from-btn"
-                    onClick={() => setCopyFromVisible(!copyFromVisible)}
-                  >
+                  <button className="copy-from-btn" onClick={() => setCopyFromVisible(!copyFromVisible)}>
                     <Copy size={16} />
                     Copy from another day
                   </button>
                   {copyFromVisible && (
                     <div className="copy-from-list">
                       {availableRoutines.map((routine) => (
-                        <button
-                          key={routine.key}
-                          className="copy-option"
-                          onClick={() => handleCopyFrom(routine.key)}
-                        >
+                        <button key={routine.key} className="copy-option" onClick={() => handleCopyFrom(routine.key)}>
                           <span>{routine.label}</span>
                           <span className="item-count">{routine.itemCount} items</span>
                         </button>
@@ -422,12 +787,8 @@ export default function RoutineBuilder({ type = 'morning' }) {
                         onDragOver={(e) => handleDragOver(e, index)}
                         onDragEnd={handleDragEnd}
                       >
-                        <div className="drag-handle">
-                          <GripVertical size={16} />
-                        </div>
-                        <div className="item-icon">
-                          <IconComponent size={20} />
-                        </div>
+                        <div className="drag-handle"><GripVertical size={16} /></div>
+                        <div className="item-icon"><IconComponent size={20} /></div>
                         <div className="item-details">
                           <input
                             type="text"
@@ -435,26 +796,19 @@ export default function RoutineBuilder({ type = 'morning' }) {
                             onChange={(e) => updateItem(item.id, { title: e.target.value })}
                             className="item-title-input"
                           />
-                          <div className="item-time">
-                            {item.startTime} - {item.endTime}
-                          </div>
+                          <div className="item-time">{item.startTime} - {item.endTime}</div>
                         </div>
                         <div className="item-duration">
                           <input
                             type="number"
                             value={item.duration}
-                            onChange={(e) =>
-                              updateItem(item.id, { duration: parseInt(e.target.value) || 1 })
-                            }
+                            onChange={(e) => updateItem(item.id, { duration: parseInt(e.target.value) || 1 })}
                             min="1"
                             max="120"
                           />
                           <span>min</span>
                         </div>
-                        <button
-                          className="remove-btn"
-                          onClick={() => removeItem(item.id)}
-                        >
+                        <button className="remove-btn" onClick={() => removeItem(item.id)}>
                           <Trash2 size={16} />
                         </button>
                       </div>
@@ -465,10 +819,7 @@ export default function RoutineBuilder({ type = 'morning' }) {
 
               {/* Add Activity */}
               <div className="add-activity-section">
-                <button
-                  className="add-btn"
-                  onClick={() => setShowSuggestions(!showSuggestions)}
-                >
+                <button className="add-btn" onClick={() => setShowSuggestions(!showSuggestions)}>
                   <Plus size={18} />
                   Add Activity
                 </button>
@@ -478,21 +829,14 @@ export default function RoutineBuilder({ type = 'morning' }) {
                     {suggestions.map((suggestion, index) => {
                       const SugIcon = suggestion.icon;
                       return (
-                        <button
-                          key={index}
-                          className="suggestion-btn"
-                          onClick={() => addRoutineItem(suggestion)}
-                        >
+                        <button key={index} className="suggestion-btn" onClick={() => addRoutineItem(suggestion)}>
                           <SugIcon size={18} />
                           <span>{suggestion.title}</span>
                           <span className="suggestion-duration">{suggestion.duration}m</span>
                         </button>
                       );
                     })}
-                    <button
-                      className="suggestion-btn custom"
-                      onClick={() => addRoutineItem()}
-                    >
+                    <button className="suggestion-btn custom" onClick={() => addRoutineItem()}>
                       <Plus size={18} />
                       <span>Custom</span>
                     </button>
@@ -518,26 +862,104 @@ export default function RoutineBuilder({ type = 'morning' }) {
                   const isCompleted = todayTask?.completed;
 
                   return (
-                    <div
-                      key={item.id}
-                      className={`routine-item view ${isCompleted ? 'completed' : ''}`}
-                      onClick={() => todayTask && toggleTaskComplete(todayTask.id)}
-                    >
+                    <div key={item.id} className={`routine-item view ${isCompleted ? 'completed' : ''}`}>
                       <div className="item-time-badge">{item.startTime}</div>
-                      <div className="item-icon">
-                        <IconComponent size={20} />
-                      </div>
+                      <div className="item-icon"><IconComponent size={20} /></div>
                       <div className="item-details">
                         <h4>{item.title}</h4>
                         <span className="item-duration-text">{item.duration} minutes</span>
                       </div>
-                      {isToday && todayTask && (
-                        <div className="item-status">
-                          {isCompleted ? (
-                            <CheckCircle2 size={20} className="status-done" />
-                          ) : (
-                            <div className="status-pending" />
-                          )}
+                      <div className="item-actions">
+                        {isToday && todayTask && (
+                          <button className="action-icon-btn" onClick={() => toggleTaskComplete(todayTask.id)} title="Toggle complete">
+                            {isCompleted ? <CheckCircle2 size={18} className="status-done" /> : <Circle size={18} />}
+                          </button>
+                        )}
+                        <button
+                          className="action-icon-btn"
+                          onClick={() => setShowCopyOptions(showCopyOptions === item.id ? false : item.id)}
+                          title="Copy to calendar"
+                        >
+                          <Calendar size={16} />
+                        </button>
+                        <button
+                          className="action-icon-btn"
+                          onClick={() => setShowCopyToRoutine(showCopyToRoutine === item.id ? false : item.id)}
+                          title="Copy to another routine"
+                        >
+                          <Layers size={16} />
+                        </button>
+                        <button
+                          className="action-icon-btn batch-trigger"
+                          onClick={() => enterBatchCopyMode(item)}
+                          title="Copy to multiple routines"
+                        >
+                          <CopyPlus size={16} />
+                        </button>
+                      </div>
+
+                      {/* Copy to calendar dropdown */}
+                      {showCopyOptions === item.id && (
+                        <div className="copy-dropdown">
+                          <div className="copy-dropdown-header">
+                            <span>Copy to Calendar:</span>
+                            <button onClick={() => setShowCopyOptions(false)}><X size={14} /></button>
+                          </div>
+                          <div className="copy-options-list">
+                            {getUpcomingDays().map((date) => (
+                              <button
+                                key={date.toISOString()}
+                                className="copy-date-option"
+                                onClick={() => { copyActivityToCalendar(item, date, true); setShowCopyOptions(false); }}
+                              >
+                                <Calendar size={14} />
+                                {format(date, 'EEE, MMM d')}
+                                <Bell size={12} className="notification-icon" />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Copy to another routine dropdown */}
+                      {showCopyToRoutine === item.id && (
+                        <div className="copy-dropdown routine-copy-dropdown">
+                          <div className="copy-dropdown-header">
+                            <span>Copy to Routine:</span>
+                            <button onClick={() => setShowCopyToRoutine(null)}><X size={14} /></button>
+                          </div>
+                          <div className="copy-routine-options">
+                            <div className="quick-copy-section">
+                              <h5>Quick Copy</h5>
+                              <button
+                                className="quick-copy-btn"
+                                onClick={() => copyActivityToRoutine(item, type === 'morning' ? 'nighttime' : 'morning', selectedDay, selectedWeek)}
+                              >
+                                {type === 'morning' ? <Moon size={14} /> : <Sun size={14} />}
+                                {type === 'morning' ? 'Nighttime' : 'Morning'} - {selectedDay.charAt(0).toUpperCase() + selectedDay.slice(1)} ({selectedWeek})
+                              </button>
+                            </div>
+                            <div className="quick-copy-section">
+                              <h5>Other Days (Week {selectedWeek})</h5>
+                              <div className="day-copy-grid">
+                                {DAYS.filter(d => d !== selectedDay).map(day => (
+                                  <button key={day} className="day-copy-btn" onClick={() => copyActivityToRoutine(item, type, day, selectedWeek)}>
+                                    {DAY_LABELS[DAYS.indexOf(day)]}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                            <div className="quick-copy-section">
+                              <h5>Other Weeks ({selectedDay})</h5>
+                              <div className="week-copy-grid">
+                                {WEEKS.filter(v => v !== selectedWeek).map(variant => (
+                                  <button key={variant} className="variant-copy-btn" onClick={() => copyActivityToRoutine(item, type, selectedDay, variant)}>
+                                    Week {variant}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -548,12 +970,132 @@ export default function RoutineBuilder({ type = 'morning' }) {
           )}
         </div>
 
+        {/* Copy Entire Routine Section */}
+        {!isEditing && routineItems.length > 0 && (
+          <div className="copy-entire-section">
+            <button className="copy-section-toggle" onClick={() => setShowCopyEntireRoutine(!showCopyEntireRoutine)}>
+              <Copy size={18} />
+              Copy Entire Routine to Another Slot
+              {showCopyEntireRoutine ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+            </button>
+
+            {showCopyEntireRoutine && (
+              <div className="copy-entire-options">
+                <div className="copy-info-banner">
+                  <AlertCircle size={16} />
+                  <span>This will overwrite the target routine with all {routineItems.length} activities.</span>
+                </div>
+
+                <div className="copy-option-group">
+                  <h4>Copy to Specific Day:</h4>
+                  {['morning', 'nighttime'].map((cType) => (
+                    <div key={cType} className="copy-type-block">
+                      <span className="copy-type-label">
+                        {cType === 'morning' ? <Sun size={14} /> : <Moon size={14} />}
+                        {cType.charAt(0).toUpperCase() + cType.slice(1)}
+                      </span>
+                      {WEEKS.map((variant) => (
+                        <div key={variant} className="copy-variant-row">
+                          <span className="variant-label">Wk {variant}</span>
+                          <div className="copy-day-pills">
+                            {DAYS.map((day) => {
+                              const isCurrent = cType === type && variant === selectedWeek && day === selectedDay;
+                              return (
+                                <button
+                                  key={`${cType}-${variant}-${day}`}
+                                  className={`copy-day-pill ${isCurrent ? 'current' : ''}`}
+                                  onClick={() => !isCurrent && copyEntireRoutineToSlot(cType, day, variant)}
+                                  disabled={isCurrent}
+                                >
+                                  {DAY_LABELS[DAYS.indexOf(day)].slice(0, 2)}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+
+                <div className="copy-option-group">
+                  <h4>Copy to All Days of a Week:</h4>
+                  <div className="copy-all-days-grid">
+                    {['morning', 'nighttime'].map((cType) =>
+                      WEEKS.map((variant) => (
+                        <button
+                          key={`all-${cType}-${variant}`}
+                          className="copy-all-days-btn"
+                          onClick={() => copyRoutineToAllDays(cType, variant)}
+                        >
+                          {cType === 'morning' ? <Sun size={14} /> : <Moon size={14} />}
+                          Week {variant}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Copy to Calendar Section */}
+        {!isEditing && routineItems.length > 0 && (
+          <div className="copy-calendar-section">
+            <button
+              className="copy-section-toggle calendar-toggle"
+              onClick={() => setShowCopyOptions(showCopyOptions === 'full' ? false : 'full')}
+            >
+              <Calendar size={18} />
+              Copy to Short-Term Calendar
+              <Bell size={14} className="notification-indicator" />
+              {showCopyOptions === 'full' ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+            </button>
+
+            {showCopyOptions === 'full' && (
+              <div className="copy-full-options">
+                <div className="copy-info-banner">
+                  <Bell size={16} />
+                  <span>Activities will appear on your Short-Term Calendar with notifications, timers, and the red time indicator.</span>
+                </div>
+
+                <div className="copy-option-group">
+                  <h4>Copy This Routine to:</h4>
+                  <div className="copy-day-grid">
+                    {getUpcomingDays().map((date) => (
+                      <button
+                        key={date.toISOString()}
+                        className="copy-cal-day-btn"
+                        onClick={() => { copyRoutineToDate(date, true); setShowCopyOptions(false); }}
+                      >
+                        <span className="cal-day-name">{format(date, 'EEE')}</span>
+                        <span className="cal-day-date">{format(date, 'd')}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="copy-option-group">
+                  <h4>Copy Entire Week (Variant {selectedWeek}):</h4>
+                  <button className="copy-week-btn" onClick={() => copyWeekRoutineToCalendar(true)} style={{ background: headerGradient }}>
+                    <Calendar size={18} />
+                    Copy All {type === 'morning' ? 'Morning' : 'Nighttime'} Routines for Week {selectedWeek}
+                  </button>
+                  <p className="copy-hint">
+                    Copies all saved {type} routines from Week {selectedWeek} (Sun-Sat) to this week's calendar with notifications.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Actions */}
         <div className="routine-actions">
           {isEditing ? (
             <>
               <button className="action-btn secondary" onClick={() => {
-                // Reload from saved
                 if (routines && routines[routineKey]) {
                   setRoutineItems(routines[routineKey].items || []);
                   setStartTime(routines[routineKey].startTime || defaultTime);
@@ -562,11 +1104,7 @@ export default function RoutineBuilder({ type = 'morning' }) {
               }}>
                 Cancel
               </button>
-              <button
-                className="action-btn primary"
-                onClick={handleSave}
-                style={{ background: headerGradient }}
-              >
+              <button className="action-btn primary" onClick={handleSave} style={{ background: headerGradient }}>
                 <Save size={18} />
                 Save Routine
               </button>
@@ -576,13 +1114,10 @@ export default function RoutineBuilder({ type = 'morning' }) {
               <button className="action-btn secondary" onClick={() => setIsEditing(true)}>
                 Edit Routine
               </button>
-              {isToday && routineItems.length > 0 && (
-                <button
-                  className="action-btn primary"
-                  onClick={handleStartRoutine}
-                  style={{ background: headerGradient }}
-                >
+              {routineItems.length > 0 && (
+                <button className="action-btn primary" onClick={handleStartRoutine} style={{ background: headerGradient }}>
                   <Play size={18} />
+                  <Bell size={14} />
                   Start Today's Routine
                 </button>
               )}

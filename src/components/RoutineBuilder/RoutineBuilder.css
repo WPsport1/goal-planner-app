@@ -61,6 +61,34 @@
   background: rgba(255, 255, 255, 0.3);
 }
 
+/* ====== SUCCESS TOAST ====== */
+.copy-success-toast {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.75rem 1.25rem;
+  background: linear-gradient(135deg, #22c55e, #16a34a);
+  color: white;
+  font-size: 0.85rem;
+  font-weight: 500;
+  animation: slideDown 0.3s ease-out;
+}
+
+.copy-success-toast svg {
+  flex-shrink: 0;
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
 /* Day/Week Selector */
 .routine-selector {
   padding: 1rem 1.5rem;
@@ -214,6 +242,179 @@
   color: var(--text-primary);
 }
 
+/* ====== BATCH COPY MODE BANNER ====== */
+.batch-copy-banner {
+  padding: 1rem 1.25rem;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.1), rgba(139, 92, 246, 0.08));
+  border-bottom: 1px solid var(--accent-primary);
+}
+
+.batch-copy-banner-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  margin-bottom: 0.75rem;
+}
+
+.batch-copy-banner-info svg {
+  color: var(--accent-primary);
+  flex-shrink: 0;
+}
+
+.batch-copy-quick-select {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.75rem;
+}
+
+.quick-select-label {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  margin-right: 0.25rem;
+}
+
+.quick-select-btn {
+  padding: 0.25rem 0.5rem;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 0.7rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.quick-select-btn:hover {
+  border-color: var(--accent-primary);
+  color: var(--accent-primary);
+  background: rgba(99, 102, 241, 0.05);
+}
+
+.batch-target-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+  margin-bottom: 0.75rem;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.batch-type-section h5 {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0 0 0.375rem 0;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.batch-variant-row {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  margin-bottom: 0.25rem;
+}
+
+.batch-variant-label {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  min-width: 28px;
+  font-weight: 600;
+}
+
+.batch-day-buttons {
+  display: flex;
+  gap: 2px;
+}
+
+.batch-day-btn {
+  padding: 0.2rem 0.35rem;
+  border: 1px solid var(--border-primary);
+  border-radius: 3px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 0.6rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-transform: uppercase;
+}
+
+.batch-day-btn:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  background: rgba(99, 102, 241, 0.1);
+}
+
+.batch-day-btn.selected {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: white;
+}
+
+.batch-day-btn.current {
+  opacity: 0.3;
+  cursor: not-allowed;
+  background: var(--bg-tertiary);
+}
+
+.batch-copy-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--border-primary);
+}
+
+.batch-count {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  flex: 1;
+}
+
+.batch-cancel-btn {
+  padding: 0.375rem 0.75rem;
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.batch-cancel-btn:hover {
+  background: var(--bg-elevated);
+}
+
+.batch-confirm-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.375rem 0.75rem;
+  border: none;
+  border-radius: 6px;
+  background: var(--accent-primary);
+  color: white;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.batch-confirm-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+}
+
+.batch-confirm-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 /* Content */
 .routine-content {
   flex: 1;
@@ -338,6 +539,8 @@
   border: 1px solid var(--border-primary);
   border-radius: 10px;
   transition: all 0.2s;
+  position: relative;
+  flex-wrap: wrap;
 }
 
 .routine-item.dragging {
@@ -437,6 +640,223 @@
   color: #ef4444;
 }
 
+/* ====== ITEM ACTIONS (View Mode per-item buttons) ====== */
+.item-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+.action-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.375rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.action-icon-btn:hover {
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--accent-primary);
+}
+
+.action-icon-btn .status-done {
+  color: #22c55e;
+}
+
+.action-icon-btn.batch-trigger:hover {
+  background: rgba(139, 92, 246, 0.1);
+  color: #8b5cf6;
+}
+
+/* ====== COPY DROPDOWN (per-item calendar & routine) ====== */
+.copy-dropdown {
+  width: 100%;
+  margin-top: 0.5rem;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  overflow: hidden;
+  animation: dropdownSlide 0.2s ease-out;
+}
+
+@keyframes dropdownSlide {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.copy-dropdown-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  background: var(--bg-tertiary);
+  border-bottom: 1px solid var(--border-primary);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.copy-dropdown-header button {
+  display: flex;
+  align-items: center;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 4px;
+}
+
+.copy-dropdown-header button:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.copy-options-list {
+  padding: 0.375rem;
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.copy-date-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.copy-date-option:hover {
+  background: rgba(99, 102, 241, 0.08);
+  color: var(--accent-primary);
+}
+
+.copy-date-option svg:first-child {
+  color: var(--accent-primary);
+}
+
+.notification-icon {
+  margin-left: auto;
+  color: #f59e0b;
+  animation: bellPulse 2s infinite;
+}
+
+@keyframes bellPulse {
+  0%, 100% { opacity: 0.6; }
+  50% { opacity: 1; }
+}
+
+/* Copy to Routine Dropdown */
+.routine-copy-dropdown {
+  max-height: 300px;
+  overflow-y: auto;
+}
+
+.copy-routine-options {
+  padding: 0.5rem;
+}
+
+.quick-copy-section {
+  margin-bottom: 0.75rem;
+}
+
+.quick-copy-section h5 {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin: 0 0 0.375rem 0;
+  padding: 0 0.25rem;
+}
+
+.quick-copy-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.5rem 0.625rem;
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  background: var(--bg-tertiary);
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.quick-copy-btn:hover {
+  border-color: var(--accent-primary);
+  background: rgba(99, 102, 241, 0.05);
+}
+
+.day-copy-grid {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.day-copy-btn {
+  padding: 0.375rem 0.625rem;
+  border: 1px solid var(--border-primary);
+  border-radius: 5px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.day-copy-btn:hover {
+  border-color: var(--accent-primary);
+  background: rgba(99, 102, 241, 0.08);
+  color: var(--accent-primary);
+}
+
+.week-copy-grid {
+  display: flex;
+  gap: 0.25rem;
+}
+
+.variant-copy-btn {
+  padding: 0.375rem 0.625rem;
+  border: 1px solid var(--border-primary);
+  border-radius: 5px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 0.75rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.variant-copy-btn:hover {
+  border-color: var(--accent-primary);
+  background: rgba(99, 102, 241, 0.08);
+  color: var(--accent-primary);
+}
+
 /* Add Activity Section */
 .add-activity-section {
   margin-top: 1rem;
@@ -519,7 +939,7 @@
 
 /* View Mode */
 .routine-list.view-mode .routine-item {
-  cursor: pointer;
+  cursor: default;
 }
 
 .routine-list.view-mode .routine-item:hover {
@@ -575,6 +995,252 @@
   height: 20px;
   border: 2px solid var(--border-secondary);
   border-radius: 50%;
+}
+
+/* ====== COPY ENTIRE ROUTINE SECTION ====== */
+.copy-entire-section {
+  border-top: 1px solid var(--border-primary);
+  background: var(--bg-tertiary);
+}
+
+.copy-section-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.875rem 1.25rem;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.copy-section-toggle:hover {
+  background: var(--bg-elevated);
+}
+
+.copy-section-toggle svg:first-child {
+  color: var(--accent-primary);
+}
+
+.copy-section-toggle svg:last-child {
+  margin-left: auto;
+  color: var(--text-muted);
+}
+
+.copy-entire-options {
+  padding: 0 1.25rem 1rem;
+  animation: dropdownSlide 0.2s ease-out;
+}
+
+.copy-info-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  padding: 0.625rem 0.75rem;
+  background: rgba(245, 158, 11, 0.08);
+  border: 1px solid rgba(245, 158, 11, 0.2);
+  border-radius: 8px;
+  margin-bottom: 0.75rem;
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+.copy-info-banner svg {
+  color: #f59e0b;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.copy-option-group {
+  margin-bottom: 0.75rem;
+}
+
+.copy-option-group h4 {
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: 0 0 0.5rem 0;
+}
+
+.copy-type-block {
+  margin-bottom: 0.625rem;
+}
+
+.copy-type-label {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.375rem;
+}
+
+.copy-variant-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.variant-label {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  min-width: 32px;
+}
+
+.copy-day-pills {
+  display: flex;
+  gap: 3px;
+}
+
+.copy-day-pill {
+  padding: 0.25rem 0.4rem;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  background: var(--bg-secondary);
+  color: var(--text-secondary);
+  font-size: 0.65rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  text-transform: uppercase;
+}
+
+.copy-day-pill:hover:not(:disabled) {
+  border-color: var(--accent-primary);
+  background: rgba(99, 102, 241, 0.1);
+  color: var(--accent-primary);
+}
+
+.copy-day-pill.current {
+  opacity: 0.3;
+  cursor: not-allowed;
+  background: var(--bg-tertiary);
+}
+
+.copy-all-days-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 0.375rem;
+}
+
+.copy-all-days-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 0.78rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.copy-all-days-btn:hover {
+  border-color: var(--accent-primary);
+  background: rgba(99, 102, 241, 0.08);
+  color: var(--accent-primary);
+}
+
+/* ====== COPY TO CALENDAR SECTION ====== */
+.copy-calendar-section {
+  border-top: 1px solid var(--border-primary);
+  background: var(--bg-tertiary);
+}
+
+.calendar-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.notification-indicator {
+  color: #f59e0b;
+  animation: bellPulse 2s infinite;
+}
+
+.copy-full-options {
+  padding: 0 1.25rem 1rem;
+  animation: dropdownSlide 0.2s ease-out;
+}
+
+.copy-day-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.375rem;
+  margin-bottom: 0.5rem;
+}
+
+.copy-cal-day-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.125rem;
+  padding: 0.5rem 0.25rem;
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.copy-cal-day-btn:hover {
+  border-color: var(--accent-primary);
+  background: rgba(99, 102, 241, 0.08);
+  transform: translateY(-1px);
+}
+
+.cal-day-name {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+}
+
+.cal-day-date {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.copy-week-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: none;
+  border-radius: 10px;
+  color: white;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.copy-week-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+.copy-hint {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  text-align: center;
+  margin: 0.5rem 0 0;
+  line-height: 1.4;
 }
 
 /* Actions */
@@ -675,5 +1341,34 @@
   .day-btn {
     padding: 0.25rem 0.5rem;
     font-size: 0.75rem;
+  }
+
+  .item-actions {
+    width: 100%;
+    justify-content: flex-end;
+    margin-top: 0.25rem;
+    padding-top: 0.25rem;
+    border-top: 1px solid var(--border-primary);
+  }
+
+  .copy-dropdown {
+    margin-left: 0;
+  }
+
+  .batch-target-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .copy-day-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .copy-all-days-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .copy-entire-options,
+  .copy-full-options {
+    padding: 0 1rem 1rem;
   }
 }
