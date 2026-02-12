@@ -208,21 +208,35 @@ export function AppProvider({ children }) {
           const savedReflections = localStorage.getItem('reflections');
 
           if (savedGoals) {
-            setGoals(JSON.parse(savedGoals));
+            try {
+              const parsed = JSON.parse(savedGoals);
+              setGoals(Array.isArray(parsed) ? parsed : []);
+            } catch {
+              setGoals([]);
+            }
           } else {
             const sample = createSampleData();
             setGoals(sample.goals);
           }
 
           if (savedTasks) {
-            setTasks(JSON.parse(savedTasks));
+            try {
+              const parsed = JSON.parse(savedTasks);
+              setTasks(Array.isArray(parsed) ? parsed : []);
+            } catch {
+              setTasks([]);
+            }
           } else {
             const sample = createSampleData();
             setTasks(sample.tasks);
           }
 
           if (savedReflections) {
-            setReflections(JSON.parse(savedReflections));
+            try {
+              setReflections(JSON.parse(savedReflections));
+            } catch {
+              setReflections([]);
+            }
           }
         }
       } catch (err) {
@@ -251,7 +265,8 @@ export function AppProvider({ children }) {
   }, [goals, isLoading]);
 
   useEffect(() => {
-    if (!isLoading && tasks.length > 0) {
+    if (!isLoading) {
+      // Save tasks even when array is empty (user may have deleted all)
       localStorage.setItem('tasks', JSON.stringify(tasks));
     }
   }, [tasks, isLoading]);
@@ -644,6 +659,15 @@ export function AppProvider({ children }) {
     setGoals(newOrder);
   };
 
+  // Helper: immediately persist tasks to localStorage
+  const saveTasksToLocalStorage = (updatedTasks) => {
+    try {
+      localStorage.setItem('tasks', JSON.stringify(updatedTasks));
+    } catch (err) {
+      console.error('Error saving tasks to localStorage:', err);
+    }
+  };
+
   // Task CRUD operations
   const addTask = async (task) => {
     const newTask = {
@@ -654,8 +678,12 @@ export function AppProvider({ children }) {
       ...task,
     };
 
-    // Optimistic update
-    setTasks((prev) => [...prev, newTask]);
+    // Optimistic update + immediate localStorage save
+    setTasks((prev) => {
+      const updated = [...prev, newTask];
+      saveTasksToLocalStorage(updated);
+      return updated;
+    });
 
     // Sync to cloud
     if (isConfigured && user) {
@@ -675,10 +703,12 @@ export function AppProvider({ children }) {
   };
 
   const updateTask = async (id, updates) => {
-    // Optimistic update
-    setTasks((prev) =>
-      prev.map((task) => (task.id === id ? { ...task, ...updates } : task))
-    );
+    // Optimistic update + immediate localStorage save
+    setTasks((prev) => {
+      const updated = prev.map((task) => (task.id === id ? { ...task, ...updates } : task));
+      saveTasksToLocalStorage(updated);
+      return updated;
+    });
 
     // Sync to cloud
     if (isConfigured && user) {
@@ -696,8 +726,12 @@ export function AppProvider({ children }) {
   };
 
   const deleteTask = async (id) => {
-    // Optimistic update
-    setTasks((prev) => prev.filter((task) => task.id !== id));
+    // Optimistic update + immediate localStorage save
+    setTasks((prev) => {
+      const updated = prev.filter((task) => task.id !== id);
+      saveTasksToLocalStorage(updated);
+      return updated;
+    });
 
     // Sync to cloud
     if (isConfigured && user) {
@@ -720,12 +754,14 @@ export function AppProvider({ children }) {
 
     const newCompleted = !task.completed;
 
-    // Optimistic update
-    setTasks((prev) =>
-      prev.map((t) =>
+    // Optimistic update + immediate localStorage save
+    setTasks((prev) => {
+      const updated = prev.map((t) =>
         t.id === id ? { ...t, completed: newCompleted } : t
-      )
-    );
+      );
+      saveTasksToLocalStorage(updated);
+      return updated;
+    });
 
     // Trigger celebrations
     if (newCompleted) {

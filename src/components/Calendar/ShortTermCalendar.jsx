@@ -94,6 +94,29 @@ const taskTypeOptions = [
   { value: 'routine', label: 'Routine' },
 ];
 
+// Color options for events
+const EVENT_COLORS = [
+  { id: 'default', label: 'Default (Priority)', color: null },
+  { id: 'blue', label: 'Blue', bg: 'rgba(59, 130, 246, 0.25)', border: '#3b82f6', text: '#93c5fd' },
+  { id: 'purple', label: 'Purple', bg: 'rgba(139, 92, 246, 0.25)', border: '#8b5cf6', text: '#c4b5fd' },
+  { id: 'green', label: 'Green', bg: 'rgba(34, 197, 94, 0.25)', border: '#22c55e', text: '#86efac' },
+  { id: 'orange', label: 'Orange', bg: 'rgba(249, 115, 22, 0.25)', border: '#f97316', text: '#fdba74' },
+  { id: 'red', label: 'Red', bg: 'rgba(239, 68, 68, 0.25)', border: '#ef4444', text: '#fca5a5' },
+  { id: 'yellow', label: 'Yellow', bg: 'rgba(234, 179, 8, 0.25)', border: '#eab308', text: '#fde047' },
+  { id: 'pink', label: 'Pink', bg: 'rgba(236, 72, 153, 0.25)', border: '#ec4899', text: '#f9a8d4' },
+  { id: 'teal', label: 'Teal', bg: 'rgba(20, 184, 166, 0.25)', border: '#14b8a6', text: '#5eead4' },
+  { id: 'indigo', label: 'Indigo', bg: 'rgba(99, 102, 241, 0.25)', border: '#6366f1', text: '#a5b4fc' },
+  { id: 'cyan', label: 'Cyan', bg: 'rgba(6, 182, 212, 0.25)', border: '#06b6d4', text: '#67e8f9' },
+];
+
+const getEventColor = (task) => {
+  if (task.color && task.color !== 'default') {
+    const colorObj = EVENT_COLORS.find(c => c.id === task.color);
+    if (colorObj) return colorObj;
+  }
+  return null; // Use priority-based colors
+};
+
 export default function ShortTermCalendar() {
   const { tasks, addTask, updateTask, deleteTask, openDetail, toggleTaskComplete } = useApp();
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -157,6 +180,7 @@ export default function ShortTermCalendar() {
     description: '',
     type: 'task',
     priority: 'medium',
+    color: 'default',
     scheduledDate: '',
     startTime: '09:00',
     endTime: '10:00',
@@ -304,6 +328,7 @@ export default function ShortTermCalendar() {
       description: '',
       type: 'task',
       priority: 'medium',
+      color: 'default',
       scheduledDate: format(date, 'yyyy-MM-dd'),
       startTime,
       endTime,
@@ -331,6 +356,7 @@ export default function ShortTermCalendar() {
       description: task.description || '',
       type: task.type || 'task',
       priority: task.priority || 'medium',
+      color: task.color || 'default',
       scheduledDate: task.scheduledDate ? format(parseISO(task.scheduledDate), 'yyyy-MM-dd') : '',
       startTime: task.startTime || '09:00',
       endTime: task.endTime || '10:00',
@@ -365,6 +391,7 @@ export default function ShortTermCalendar() {
       description: eventForm.description,
       type: eventForm.type,
       priority: eventForm.priority,
+      color: eventForm.color || 'default',
       scheduledDate: localDate.toISOString(),
       startTime: eventForm.startTime,
       endTime: eventForm.endTime,
@@ -465,11 +492,20 @@ export default function ShortTermCalendar() {
                   {dayTasks.map((task) => {
                     const taskStyle = getTaskStyle(task);
                     const isZoomedIn = HOUR_HEIGHT >= 120;
+                    const customColor = getEventColor(task);
+                    const colorStyle = customColor ? {
+                      ...taskStyle,
+                      background: customColor.bg,
+                      borderLeftColor: customColor.border,
+                      borderLeftWidth: '4px',
+                      borderLeftStyle: 'solid',
+                      color: customColor.text,
+                    } : taskStyle;
                     return (
                       <div
                         key={task.id}
-                        className={`calendar-task priority-${task.priority} type-${task.type} ${task.completed ? 'completed' : ''} ${isZoomedIn ? 'zoomed' : ''}`}
-                        style={taskStyle}
+                        className={`calendar-task ${!customColor ? `priority-${task.priority}` : ''} type-${task.type} ${task.completed ? 'completed' : ''} ${isZoomedIn ? 'zoomed' : ''} ${customColor ? 'custom-color' : ''}`}
+                        style={colorStyle}
                         onClick={(e) => handleTaskClick(task, e)}
                         title={`${task.title} (${task.startTime} - ${task.endTime})`}
                       >
@@ -629,6 +665,28 @@ export default function ShortTermCalendar() {
                   <option value="medium">Medium</option>
                   <option value="high">High</option>
                 </select>
+              </div>
+            </div>
+
+            {/* Color */}
+            <div className="form-group">
+              <label>Color</label>
+              <div className="color-picker-row">
+                {EVENT_COLORS.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className={`color-swatch ${eventForm.color === c.id ? 'selected' : ''}`}
+                    style={{
+                      background: c.bg || 'var(--bg-tertiary)',
+                      borderColor: c.border || 'var(--border-primary)',
+                    }}
+                    onClick={() => setEventForm({ ...eventForm, color: c.id })}
+                    title={c.label}
+                  >
+                    {c.id === 'default' && <span className="swatch-label">A</span>}
+                  </button>
+                ))}
               </div>
             </div>
 
@@ -922,6 +980,7 @@ export default function ShortTermCalendar() {
                 description: '',
                 type: 'task',
                 priority: 'medium',
+                color: 'default',
                 scheduledDate: format(currentDate, 'yyyy-MM-dd'),
                 startTime: '09:00',
                 endTime: '10:00',
