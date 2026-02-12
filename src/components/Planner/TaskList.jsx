@@ -20,6 +20,7 @@ import {
   BellOff,
   ChevronDown,
   ChevronUp,
+  CheckCircle2,
 } from 'lucide-react';
 import { format, parseISO, isToday, isTomorrow, isThisWeek } from 'date-fns';
 import './TaskList.css';
@@ -63,7 +64,7 @@ const reminderOptions = [
 ];
 
 export default function TaskList() {
-  const { tasks, goals, addTask, deleteTask, toggleTaskComplete, openDetail, reorderTasks } = useApp();
+  const { tasks, goals, addTask, deleteTask, toggleTaskComplete, openDetail, reorderTasks, lastSaveStatus } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('time'); // time, priority, type, name
   const [sortOrder, setSortOrder] = useState('asc');
@@ -88,6 +89,7 @@ export default function TaskList() {
   });
   const [draggedItem, setDraggedItem] = useState(null);
   const [showReminderOptions, setShowReminderOptions] = useState(false);
+  const [saveToast, setSaveToast] = useState(null);
 
   // Filter and sort tasks
   const filteredTasks = tasks
@@ -143,7 +145,7 @@ export default function TaskList() {
   const pendingTasks = filteredTasks.filter((t) => !t.completed);
   const completedTasks = filteredTasks.filter((t) => t.completed);
 
-  const handleAddTask = (e) => {
+  const handleAddTask = async (e) => {
     e.preventDefault();
     if (!newTask.title.trim()) return;
 
@@ -152,10 +154,14 @@ export default function TaskList() {
     const [startH, startM] = (newTask.startTime || '09:00').split(':').map(Number);
     const localDate = new Date(year, month - 1, day, startH, startM);
 
-    addTask({
+    await addTask({
       ...newTask,
       scheduledDate: localDate.toISOString(),
     });
+
+    // Show save confirmation
+    setSaveToast('Task saved!');
+    setTimeout(() => setSaveToast(null), 2500);
 
     setNewTask({
       title: '',
@@ -549,6 +555,22 @@ export default function TaskList() {
           </>
         )}
       </div>
+
+      {/* Save status indicator */}
+      {lastSaveStatus && Date.now() - lastSaveStatus.time < 3000 && (
+        <div className={`task-save-indicator ${lastSaveStatus.success ? 'success' : 'error'}`}>
+          {lastSaveStatus.success ? <CheckCircle2 size={12} /> : null}
+          {lastSaveStatus.success ? 'Saved' : 'Save failed'}
+        </div>
+      )}
+
+      {/* Save Toast */}
+      {saveToast && (
+        <div className="save-confirmation-toast">
+          <CheckCircle2 size={16} />
+          {saveToast}
+        </div>
+      )}
     </div>
   );
 }

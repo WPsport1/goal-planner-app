@@ -118,7 +118,7 @@ const getEventColor = (task) => {
 };
 
 export default function ShortTermCalendar() {
-  const { tasks, addTask, updateTask, deleteTask, openDetail, toggleTaskComplete } = useApp();
+  const { tasks, addTask, updateTask, deleteTask, openDetail, toggleTaskComplete, lastSaveStatus } = useApp();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState('day');
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -266,11 +266,26 @@ export default function ShortTermCalendar() {
     const startMinutes = startHour * 60 + startMinute;
     const endMinutes = endHour * 60 + endMinute;
     const duration = Math.max(15, endMinutes - startMinutes); // Minimum 15 min display
+    const heightPx = duration * SLOT_HEIGHT;
 
     return {
       top: `${startMinutes * SLOT_HEIGHT}px`,
-      height: `${duration * SLOT_HEIGHT - 2}px`,
+      height: `${heightPx - 4}px`, // 4px gap between stacked events
+      minHeight: `${Math.max(28, heightPx - 4)}px`, // Ensure minimum readable height
     };
+  };
+
+  // Get duration category for CSS class (for visual scaling)
+  const getDurationClass = (task) => {
+    if (!task.startTime || !task.endTime) return '';
+    const [startH, startM] = task.startTime.split(':').map(Number);
+    const [endH, endM] = task.endTime.split(':').map(Number);
+    const duration = (endH * 60 + endM) - (startH * 60 + startM);
+    if (duration <= 15) return 'duration-tiny';
+    if (duration <= 30) return 'duration-short';
+    if (duration <= 60) return 'duration-medium';
+    if (duration <= 120) return 'duration-long';
+    return 'duration-extra-long';
   };
 
   // Calculate current time indicator position
@@ -375,8 +390,11 @@ export default function ShortTermCalendar() {
     setShowEventModal(true);
   };
 
+  // Save confirmation state
+  const [saveConfirmation, setSaveConfirmation] = useState(null);
+
   // Save event (create or update)
-  const handleSaveEvent = () => {
+  const handleSaveEvent = async () => {
     if (!eventForm.title.trim()) return;
     if (!eventForm.scheduledDate) return;
 
@@ -402,10 +420,14 @@ export default function ShortTermCalendar() {
     };
 
     if (editingTask) {
-      updateTask(editingTask.id, eventData);
+      await updateTask(editingTask.id, eventData);
     } else {
-      addTask(eventData);
+      await addTask(eventData);
     }
+
+    // Show save confirmation
+    setSaveConfirmation(editingTask ? 'Event updated!' : 'Event saved!');
+    setTimeout(() => setSaveConfirmation(null), 2500);
 
     setShowEventModal(false);
     setEditingTask(null);
@@ -492,44 +514,49 @@ export default function ShortTermCalendar() {
                   {dayTasks.map((task) => {
                     const taskStyle = getTaskStyle(task);
                     const isZoomedIn = HOUR_HEIGHT >= 120;
+                    const durationCls = getDurationClass(task);
                     const customColor = getEventColor(task);
                     const colorStyle = customColor ? {
                       ...taskStyle,
                       background: customColor.bg,
                       borderLeftColor: customColor.border,
-                      borderLeftWidth: '4px',
+                      borderLeftWidth: '5px',
                       borderLeftStyle: 'solid',
                       color: customColor.text,
                     } : taskStyle;
                     return (
                       <div
                         key={task.id}
-                        className={`calendar-task ${!customColor ? `priority-${task.priority}` : ''} type-${task.type} ${task.completed ? 'completed' : ''} ${isZoomedIn ? 'zoomed' : ''} ${customColor ? 'custom-color' : ''}`}
+                        className={`calendar-task ${!customColor ? `priority-${task.priority}` : ''} type-${task.type} ${task.completed ? 'completed' : ''} ${isZoomedIn ? 'zoomed' : ''} ${customColor ? 'custom-color' : ''} ${durationCls}`}
                         style={colorStyle}
                         onClick={(e) => handleTaskClick(task, e)}
                         title={`${task.title} (${task.startTime} - ${task.endTime})`}
                       >
-                        {task.type === 'routine' && (
-                          <span
-                            className="routine-task-check"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              toggleTaskComplete(task.id);
-                            }}
-                          >
-                            {task.completed ? <CheckCircle2 size={isZoomedIn ? 14 : 12} /> : <Circle size={isZoomedIn ? 14 : 12} />}
+                        <div className="task-top-bar">
+                          {task.type === 'routine' && (
+                            <span
+                              className="routine-task-check"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleTaskComplete(task.id);
+                              }}
+                            >
+                              {task.completed ? <CheckCircle2 size={isZoomedIn ? 16 : 12} /> : <Circle size={isZoomedIn ? 16 : 12} />}
+                            </span>
+                          )}
+                          <span className="task-time">{task.startTime} - {task.endTime}</span>
+                          <span className="task-icons-right">
+                            {task.type === 'routine' && task.reminder && (
+                              <Bell size={isZoomedIn ? 12 : 9} className="task-reminder-icon" />
+                            )}
+                            {task.recurrence && task.recurrence !== 'none' && (
+                              <Repeat size={isZoomedIn ? 12 : 10} className="task-recurrence-icon" />
+                            )}
                           </span>
-                        )}
-                        <span className="task-time">{task.startTime} - {task.endTime}</span>
+                        </div>
                         <span className="task-title">{task.title}</span>
                         {isZoomedIn && task.description && (
                           <span className="task-description-preview">{task.description}</span>
-                        )}
-                        {task.type === 'routine' && task.reminder && (
-                          <Bell size={isZoomedIn ? 11 : 9} className="task-reminder-icon" />
-                        )}
-                        {task.recurrence && task.recurrence !== 'none' && (
-                          <Repeat size={isZoomedIn ? 12 : 10} className="task-recurrence-icon" />
                         )}
                       </div>
                     );
@@ -631,7 +658,7 @@ export default function ShortTermCalendar() {
                 onChange={(e) => setEventForm({ ...eventForm, title: e.target.value })}
                 placeholder="Enter event title..."
                 autoFocus
-                rows={2}
+                rows={3}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
@@ -1113,7 +1140,20 @@ export default function ShortTermCalendar() {
           <span className="legend-line"></span>
           <span>Now</span>
         </div>
+        {lastSaveStatus && Date.now() - lastSaveStatus.time < 3000 && (
+          <div className={`legend-item save-indicator ${lastSaveStatus.success ? 'success' : 'error'}`}>
+            <span>{lastSaveStatus.success ? '✓ Saved' : '✗ Save failed'}</span>
+          </div>
+        )}
       </div>
+
+      {/* Save Confirmation Toast */}
+      {saveConfirmation && (
+        <div className="save-confirmation-toast">
+          <CheckCircle2 size={16} />
+          {saveConfirmation}
+        </div>
+      )}
 
       {/* Event Modal */}
       {renderEventModal()}

@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from './AuthContext';
 import {
@@ -12,6 +12,42 @@ import {
   isSupabaseConfigured
 } from '../services/supabase';
 import { isToday, parseISO, startOfDay, subDays, isSameDay } from 'date-fns';
+
+// ============================================
+// BULLETPROOF localStorage helpers
+// ============================================
+const safeLocalGet = (key, fallback = null) => {
+  try {
+    const raw = localStorage.getItem(key);
+    if (raw === null || raw === undefined) return fallback;
+    const parsed = JSON.parse(raw);
+    // For arrays, validate type
+    if (fallback !== null && Array.isArray(fallback)) {
+      return Array.isArray(parsed) ? parsed : fallback;
+    }
+    return parsed;
+  } catch (err) {
+    console.error(`[Storage] Error reading "${key}":`, err);
+    return fallback;
+  }
+};
+
+const safeLocalSet = (key, value) => {
+  try {
+    const json = JSON.stringify(value);
+    localStorage.setItem(key, json);
+    // Verify the write succeeded by reading it back
+    const verify = localStorage.getItem(key);
+    if (verify !== json) {
+      console.error(`[Storage] Write verification FAILED for "${key}"`);
+      return false;
+    }
+    return true;
+  } catch (err) {
+    console.error(`[Storage] Error writing "${key}":`, err);
+    return false;
+  }
+};
 
 const AppContext = createContext();
 
@@ -71,6 +107,10 @@ export function AppProvider({ children }) {
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncError, setSyncError] = useState(null);
+
+  // Save status for visual feedback
+  const [lastSaveStatus, setLastSaveStatus] = useState(null); // { time, success, key }
+  const dataLoadedRef = useRef(false); // Track whether initial load has completed
 
   // State for goals (long-term)
   const [goals, setGoals] = useState([]);
@@ -134,6 +174,7 @@ export function AppProvider({ children }) {
   // Load data on mount
   useEffect(() => {
     const loadData = async () => {
+      console.log('[AppContext] loadData starting, isConfigured:', isConfigured, 'user:', !!user);
       setIsLoading(true);
       setSyncError(null);
 
@@ -202,78 +243,85 @@ export function AppProvider({ children }) {
             console.warn('Phase 3 data not loaded (tables may not exist yet):', phase3Err);
           }
         } else {
-          // Load from localStorage (local-only mode)
-          const savedGoals = localStorage.getItem('goals');
-          const savedTasks = localStorage.getItem('tasks');
-          const savedReflections = localStorage.getItem('reflections');
+          // =============================================
+          // LOCAL-ONLY MODE — Load from localStorage
+          // =============================================
+          console.log('[AppContext] Loading from localStorage (local-only mode)');
 
-          if (savedGoals) {
-            try {
-              const parsed = JSON.parse(savedGoals);
-              setGoals(Array.isArray(parsed) ? parsed : []);
-            } catch {
-              setGoals([]);
-            }
+          const savedGoals = safeLocalGet('goals', null);
+          const savedTasks = safeLocalGet('tasks', null);
+          const savedReflections = safeLocalGet('reflections', []);
+
+          if (savedGoals !== null && Array.isArray(savedGoals)) {
+            console.log('[AppContext] Loaded', savedGoals.length, 'goals from localStorage');
+            setGoals(savedGoals);
           } else {
+            console.log('[AppContext] No saved goals found, creating sample data');
             const sample = createSampleData();
             setGoals(sample.goals);
           }
 
-          if (savedTasks) {
-            try {
-              const parsed = JSON.parse(savedTasks);
-              setTasks(Array.isArray(parsed) ? parsed : []);
-            } catch {
-              setTasks([]);
-            }
+          if (savedTasks !== null && Array.isArray(savedTasks)) {
+            console.log('[AppContext] Loaded', savedTasks.length, 'tasks from localStorage');
+            setTasks(savedTasks);
           } else {
+            console.log('[AppContext] No saved tasks found, creating sample data');
             const sample = createSampleData();
             setTasks(sample.tasks);
           }
 
-          if (savedReflections) {
-            try {
-              setReflections(JSON.parse(savedReflections));
-            } catch {
-              setReflections([]);
-            }
+          if (Array.isArray(savedReflections)) {
+            setReflections(savedReflections);
           }
         }
       } catch (err) {
-        console.error('Error loading data:', err);
+        console.error('[AppContext] Error loading data:', err);
         setSyncError(err.message);
-        // Fall back to localStorage
-        const savedGoals = localStorage.getItem('goals');
-        const savedTasks = localStorage.getItem('tasks');
-        const savedReflections = localStorage.getItem('reflections');
-        if (savedGoals) setGoals(JSON.parse(savedGoals));
-        if (savedTasks) setTasks(JSON.parse(savedTasks));
-        if (savedReflections) setReflections(JSON.parse(savedReflections));
+        // Fall back to localStorage with SAFE helpers
+        const savedGoals = safeLocalGet('goals', []);
+        const savedTasks = safeLocalGet('tasks', []);
+        const savedReflections = safeLocalGet('reflections', []);
+        setGoals(savedGoals);
+        setTasks(savedTasks);
+        setReflections(savedReflections);
       } finally {
+        dataLoadedRef.current = true;
         setIsLoading(false);
+        console.log('[AppContext] loadData complete');
       }
     };
 
     loadData();
   }, [user, isConfigured]);
 
-  // Save to localStorage as backup (always)
+  // =============================================
+  // AUTO-SAVE to localStorage (backup, always runs)
+  // Only saves AFTER initial data load is complete
+  // =============================================
   useEffect(() => {
-    if (!isLoading && goals.length > 0) {
-      localStorage.setItem('goals', JSON.stringify(goals));
+    if (!isLoading && dataLoadedRef.current) {
+      const ok = safeLocalSet('goals', goals);
+      if (ok) {
+        console.log('[AutoSave] Goals saved:', goals.length, 'items');
+      }
     }
   }, [goals, isLoading]);
 
   useEffect(() => {
-    if (!isLoading) {
-      // Save tasks even when array is empty (user may have deleted all)
-      localStorage.setItem('tasks', JSON.stringify(tasks));
+    if (!isLoading && dataLoadedRef.current) {
+      const ok = safeLocalSet('tasks', tasks);
+      if (ok) {
+        console.log('[AutoSave] Tasks saved:', tasks.length, 'items');
+        setLastSaveStatus({ time: Date.now(), success: true, key: 'tasks' });
+      } else {
+        setLastSaveStatus({ time: Date.now(), success: false, key: 'tasks' });
+      }
     }
   }, [tasks, isLoading]);
 
   useEffect(() => {
-    if (!isLoading) {
-      localStorage.setItem('reflections', JSON.stringify(reflections));
+    if (!isLoading && dataLoadedRef.current) {
+      safeLocalSet('reflections', reflections);
     }
   }, [reflections, isLoading]);
 
@@ -579,8 +627,12 @@ export function AppProvider({ children }) {
       ...goal,
     };
 
-    // Optimistic update
-    setGoals((prev) => [...prev, newGoal]);
+    // Optimistic update + immediate localStorage save
+    setGoals((prev) => {
+      const updated = [...prev, newGoal];
+      saveGoalsToLocalStorage(updated);
+      return updated;
+    });
 
     // Sync to cloud if available
     if (isConfigured && user) {
@@ -602,10 +654,12 @@ export function AppProvider({ children }) {
   const updateGoal = async (id, updates) => {
     const oldGoal = goals.find((g) => g.id === id);
 
-    // Optimistic update
-    setGoals((prev) =>
-      prev.map((goal) => (goal.id === id ? { ...goal, ...updates } : goal))
-    );
+    // Optimistic update + immediate localStorage save
+    setGoals((prev) => {
+      const updated = prev.map((goal) => (goal.id === id ? { ...goal, ...updates } : goal));
+      saveGoalsToLocalStorage(updated);
+      return updated;
+    });
 
     // Check for goal completion celebration
     if (updates.status === 'completed' && oldGoal?.status !== 'completed') {
@@ -637,8 +691,12 @@ export function AppProvider({ children }) {
   };
 
   const deleteGoal = async (id) => {
-    // Optimistic update
-    setGoals((prev) => prev.filter((goal) => goal.id !== id));
+    // Optimistic update + immediate localStorage save
+    setGoals((prev) => {
+      const updated = prev.filter((goal) => goal.id !== id);
+      saveGoalsToLocalStorage(updated);
+      return updated;
+    });
 
     // Sync to cloud
     if (isConfigured && user) {
@@ -657,15 +715,26 @@ export function AppProvider({ children }) {
 
   const reorderGoals = (newOrder) => {
     setGoals(newOrder);
+    saveGoalsToLocalStorage(newOrder);
   };
 
-  // Helper: immediately persist tasks to localStorage
+  // Helper: immediately persist tasks to localStorage with verification
   const saveTasksToLocalStorage = (updatedTasks) => {
-    try {
-      localStorage.setItem('tasks', JSON.stringify(updatedTasks));
-    } catch (err) {
-      console.error('Error saving tasks to localStorage:', err);
+    const ok = safeLocalSet('tasks', updatedTasks);
+    console.log('[DirectSave] Tasks saved immediately:', updatedTasks.length, 'items, success:', ok);
+    if (ok) {
+      setLastSaveStatus({ time: Date.now(), success: true, key: 'tasks' });
+    } else {
+      setLastSaveStatus({ time: Date.now(), success: false, key: 'tasks' });
     }
+    return ok;
+  };
+
+  // Helper: immediately persist goals to localStorage with verification
+  const saveGoalsToLocalStorage = (updatedGoals) => {
+    const ok = safeLocalSet('goals', updatedGoals);
+    console.log('[DirectSave] Goals saved immediately:', updatedGoals.length, 'items, success:', ok);
+    return ok;
   };
 
   // Task CRUD operations
@@ -800,6 +869,7 @@ export function AppProvider({ children }) {
 
   const reorderTasks = (newOrder) => {
     setTasks(newOrder);
+    saveTasksToLocalStorage(newOrder);
   };
 
   // Reflection CRUD operations
@@ -1126,6 +1196,7 @@ export function AppProvider({ children }) {
     isSyncing,
     syncError,
     clearSyncError,
+    lastSaveStatus,
 
     // Tab navigation
     setActiveTab,
