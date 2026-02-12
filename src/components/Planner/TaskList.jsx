@@ -147,9 +147,14 @@ export default function TaskList() {
     e.preventDefault();
     if (!newTask.title.trim()) return;
 
+    // Build scheduledDate as local time to avoid UTC timezone issues
+    const [year, month, day] = newTask.scheduledDate.split('-').map(Number);
+    const [startH, startM] = (newTask.startTime || '09:00').split(':').map(Number);
+    const localDate = new Date(year, month - 1, day, startH, startM);
+
     addTask({
       ...newTask,
-      scheduledDate: new Date(newTask.scheduledDate).toISOString(),
+      scheduledDate: localDate.toISOString(),
     });
 
     setNewTask({

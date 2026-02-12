@@ -34,6 +34,8 @@ import {
   Moon,
   CheckCircle2,
   Circle,
+  ZoomIn,
+  ZoomOut,
 } from 'lucide-react';
 import './ShortTermCalendar.css';
 
@@ -62,8 +64,15 @@ const generateTimeSlots = () => {
 };
 
 const TIME_SLOTS = generateTimeSlots();
-const SLOT_HEIGHT = 1; // Height per 1-min slot in pixels (60px per hour)
-const HOUR_HEIGHT = 60; // Pixels per hour
+
+// Zoom presets: each level increases pixels-per-hour
+const ZOOM_LEVELS = [
+  { label: '1x', hourHeight: 60 },
+  { label: '1.5x', hourHeight: 90 },
+  { label: '2x', hourHeight: 120 },
+  { label: '3x', hourHeight: 180 },
+  { label: '4x', hourHeight: 240 },
+];
 
 // Recurrence options
 const recurrenceOptions = [
@@ -92,6 +101,11 @@ export default function ShortTermCalendar() {
   const [currentTime, setCurrentTime] = useState(new Date());
   const calendarRef = useRef(null);
   const timeIndicatorRef = useRef(null);
+
+  // Zoom state (default to 2x for Day view so entries are readable)
+  const [zoomLevel, setZoomLevel] = useState(2);
+  const HOUR_HEIGHT = (view === 'day' || view === 'week') ? ZOOM_LEVELS[zoomLevel].hourHeight : 60;
+  const SLOT_HEIGHT = HOUR_HEIGHT / 60; // px per minute
 
   // Routine progress tracking for today
   const todayRoutineTasks = useMemo(() => {
@@ -338,13 +352,20 @@ export default function ShortTermCalendar() {
   // Save event (create or update)
   const handleSaveEvent = () => {
     if (!eventForm.title.trim()) return;
+    if (!eventForm.scheduledDate) return;
+
+    // Build scheduledDate as local time to avoid timezone issues
+    // Parse the date parts manually to avoid UTC interpretation
+    const [year, month, day] = eventForm.scheduledDate.split('-').map(Number);
+    const [startH, startM] = (eventForm.startTime || '09:00').split(':').map(Number);
+    const localDate = new Date(year, month - 1, day, startH, startM);
 
     const eventData = {
-      title: eventForm.title,
+      title: eventForm.title.trim(),
       description: eventForm.description,
       type: eventForm.type,
       priority: eventForm.priority,
-      scheduledDate: new Date(`${eventForm.scheduledDate}T${eventForm.startTime}`).toISOString(),
+      scheduledDate: localDate.toISOString(),
       startTime: eventForm.startTime,
       endTime: eventForm.endTime,
       recurrence: eventForm.recurrence,
@@ -378,7 +399,7 @@ export default function ShortTermCalendar() {
 
     return (
       <div className="time-grid-container" ref={calendarRef}>
-        <div className={`time-grid ${isMultiDay ? 'multi-day' : 'single-day'}`}>
+        <div className={`time-grid ${isMultiDay ? 'multi-day' : 'single-day'}`} style={{ minHeight: `${24 * HOUR_HEIGHT}px` }}>
           {/* Time labels column */}
           {showTimeColumn && (
             <div className="time-labels">
@@ -441,35 +462,42 @@ export default function ShortTermCalendar() {
                   )}
 
                   {/* Tasks */}
-                  {dayTasks.map((task) => (
-                    <div
-                      key={task.id}
-                      className={`calendar-task priority-${task.priority} type-${task.type} ${task.completed ? 'completed' : ''}`}
-                      style={getTaskStyle(task)}
-                      onClick={(e) => handleTaskClick(task, e)}
-                      title={`${task.title} (${task.startTime} - ${task.endTime})`}
-                    >
-                      {task.type === 'routine' && (
-                        <span
-                          className="routine-task-check"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleTaskComplete(task.id);
-                          }}
-                        >
-                          {task.completed ? <CheckCircle2 size={12} /> : <Circle size={12} />}
-                        </span>
-                      )}
-                      <span className="task-time">{task.startTime}</span>
-                      <span className="task-title">{task.title}</span>
-                      {task.type === 'routine' && task.reminder && (
-                        <Bell size={9} className="task-reminder-icon" />
-                      )}
-                      {task.recurrence && task.recurrence !== 'none' && (
-                        <Repeat size={10} className="task-recurrence-icon" />
-                      )}
-                    </div>
-                  ))}
+                  {dayTasks.map((task) => {
+                    const taskStyle = getTaskStyle(task);
+                    const isZoomedIn = HOUR_HEIGHT >= 120;
+                    return (
+                      <div
+                        key={task.id}
+                        className={`calendar-task priority-${task.priority} type-${task.type} ${task.completed ? 'completed' : ''} ${isZoomedIn ? 'zoomed' : ''}`}
+                        style={taskStyle}
+                        onClick={(e) => handleTaskClick(task, e)}
+                        title={`${task.title} (${task.startTime} - ${task.endTime})`}
+                      >
+                        {task.type === 'routine' && (
+                          <span
+                            className="routine-task-check"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleTaskComplete(task.id);
+                            }}
+                          >
+                            {task.completed ? <CheckCircle2 size={isZoomedIn ? 14 : 12} /> : <Circle size={isZoomedIn ? 14 : 12} />}
+                          </span>
+                        )}
+                        <span className="task-time">{task.startTime} - {task.endTime}</span>
+                        <span className="task-title">{task.title}</span>
+                        {isZoomedIn && task.description && (
+                          <span className="task-description-preview">{task.description}</span>
+                        )}
+                        {task.type === 'routine' && task.reminder && (
+                          <Bell size={isZoomedIn ? 11 : 9} className="task-reminder-icon" />
+                        )}
+                        {task.recurrence && task.recurrence !== 'none' && (
+                          <Repeat size={isZoomedIn ? 12 : 10} className="task-recurrence-icon" />
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             );
@@ -559,14 +587,20 @@ export default function ShortTermCalendar() {
 
           <div className="event-modal-body">
             {/* Title */}
-            <div className="form-group">
+            <div className="form-group title-group">
               <label>Title</label>
-              <input
-                type="text"
+              <textarea
+                className="title-textarea"
                 value={eventForm.title}
                 onChange={(e) => setEventForm({ ...eventForm, title: e.target.value })}
                 placeholder="Enter event title..."
                 autoFocus
+                rows={2}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                  }
+                }}
               />
             </div>
 
@@ -884,9 +918,26 @@ export default function ShortTermCalendar() {
             onClick={() => {
               setEditingTask(null);
               setEventForm({
-                ...eventForm,
+                title: '',
+                description: '',
+                type: 'task',
+                priority: 'medium',
                 scheduledDate: format(currentDate, 'yyyy-MM-dd'),
+                startTime: '09:00',
+                endTime: '10:00',
+                recurrence: 'none',
+                customRecurrence: {
+                  frequency: 'weekly',
+                  interval: 1,
+                  daysOfWeek: [],
+                  endType: 'never',
+                  endDate: '',
+                  endCount: 10,
+                },
+                reminder: false,
+                reminderMinutes: 15,
               });
+              setShowCustomRecurrence(false);
               setShowEventModal(true);
             }}
           >
@@ -904,6 +955,27 @@ export default function ShortTermCalendar() {
               </button>
             ))}
           </div>
+          {(view === 'day' || view === 'week') && (
+            <div className="zoom-controls">
+              <button
+                className="zoom-btn"
+                onClick={() => setZoomLevel(Math.max(0, zoomLevel - 1))}
+                disabled={zoomLevel === 0}
+                title="Zoom out"
+              >
+                <ZoomOut size={14} />
+              </button>
+              <span className="zoom-label">{ZOOM_LEVELS[zoomLevel].label}</span>
+              <button
+                className="zoom-btn"
+                onClick={() => setZoomLevel(Math.min(ZOOM_LEVELS.length - 1, zoomLevel + 1))}
+                disabled={zoomLevel === ZOOM_LEVELS.length - 1}
+                title="Zoom in"
+              >
+                <ZoomIn size={14} />
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
