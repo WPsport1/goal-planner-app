@@ -179,8 +179,20 @@ export function AppProvider({ children }) {
       setSyncError(null);
 
       try {
+        // =============================================
+        // ALWAYS load from localStorage FIRST as the
+        // source of truth, regardless of Supabase config.
+        // Supabase is treated as an OPTIONAL cloud backup.
+        // =============================================
+        const localGoals = safeLocalGet('goals', null);
+        const localTasks = safeLocalGet('tasks', null);
+        const localReflections = safeLocalGet('reflections', []);
+
+        console.log('[AppContext] localStorage check — goals:', localGoals?.length ?? 'null', 'tasks:', localTasks?.length ?? 'null');
+
         // If using cloud sync with authenticated user
         if (isConfigured && user) {
+          console.log('[AppContext] Supabase is configured, attempting cloud load...');
           // Load from Supabase - core data
           const [goalsResult, tasksResult, reflectionsResult] = await Promise.all([
             goalService.getAll(user.id),
@@ -195,20 +207,38 @@ export function AppProvider({ children }) {
             console.warn('Reflections not loaded:', reflectionsResult.error);
           }
 
-          // If user has no data, create sample data
-          if (goalsResult.data.length === 0 && tasksResult.data.length === 0) {
+          const cloudHasGoals = goalsResult.data && goalsResult.data.length > 0;
+          const cloudHasTasks = tasksResult.data && tasksResult.data.length > 0;
+          const localHasGoals = localGoals !== null && Array.isArray(localGoals) && localGoals.length > 0;
+          const localHasTasks = localTasks !== null && Array.isArray(localTasks) && localTasks.length > 0;
+
+          console.log('[AppContext] Cloud data — goals:', goalsResult.data?.length, 'tasks:', tasksResult.data?.length);
+          console.log('[AppContext] Local data — goals:', localGoals?.length ?? 0, 'tasks:', localTasks?.length ?? 0);
+
+          if (cloudHasGoals || cloudHasTasks) {
+            // Cloud has data — use it
+            console.log('[AppContext] Using cloud data');
+            setGoals(goalsResult.data.map(transformGoalFromDB));
+            setTasks(tasksResult.data.map(transformTaskFromDB));
+            if (reflectionsResult.data) {
+              setReflections(reflectionsResult.data.map(transformReflectionFromDB));
+            }
+          } else if (localHasGoals || localHasTasks) {
+            // Cloud is empty BUT localStorage has data — USE LOCAL DATA
+            // This is the critical fix: don't overwrite local data with sample data
+            console.log('[AppContext] Cloud empty, but localStorage has data — using local data');
+            setGoals(localHasGoals ? localGoals : []);
+            setTasks(localHasTasks ? localTasks : []);
+            if (Array.isArray(localReflections)) {
+              setReflections(localReflections);
+            }
+          } else {
+            // Both cloud and local are empty — new user, create sample data
+            console.log('[AppContext] Both cloud and local empty — creating sample data');
             const sample = createSampleData();
             setGoals(sample.goals);
             setTasks(sample.tasks);
             setReflections(sample.reflections);
-          } else {
-            // Transform from database format to app format
-            setGoals(goalsResult.data.map(transformGoalFromDB));
-            setTasks(tasksResult.data.map(transformTaskFromDB));
-            // Load reflections if available
-            if (reflectionsResult.data) {
-              setReflections(reflectionsResult.data.map(transformReflectionFromDB));
-            }
           }
 
           // Load Phase 3 data (don't fail if tables don't exist yet)
