@@ -22,6 +22,8 @@ import {
 import {
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   Calendar as CalendarIcon,
   Clock,
   X,
@@ -36,6 +38,7 @@ import {
   Circle,
   ZoomIn,
   ZoomOut,
+  Crosshair,
 } from 'lucide-react';
 import './ShortTermCalendar.css';
 
@@ -66,12 +69,16 @@ const generateTimeSlots = () => {
 const TIME_SLOTS = generateTimeSlots();
 
 // Zoom presets: each level increases pixels-per-hour
+// Levels 0-4 = normal zoom, 5-7 = hour-focus zoom (single hour fills viewport)
 const ZOOM_LEVELS = [
-  { label: '1x', hourHeight: 60 },
-  { label: '1.5x', hourHeight: 90 },
-  { label: '2x', hourHeight: 120 },
-  { label: '3x', hourHeight: 180 },
-  { label: '4x', hourHeight: 240 },
+  { label: '1x', hourHeight: 60, hourFocus: false },
+  { label: '1.5x', hourHeight: 90, hourFocus: false },
+  { label: '2x', hourHeight: 120, hourFocus: false },
+  { label: '3x', hourHeight: 180, hourFocus: false },
+  { label: '4x', hourHeight: 240, hourFocus: false },
+  { label: '6x', hourHeight: 360, hourFocus: false },
+  { label: '10x', hourHeight: 600, hourFocus: true },
+  { label: '1hr', hourHeight: 900, hourFocus: true },
 ];
 
 // Recurrence options
@@ -127,6 +134,8 @@ export default function ShortTermCalendar() {
 
   // Zoom state (default to 2x for Day view so entries are readable)
   const [zoomLevel, setZoomLevel] = useState(2);
+  const [focusHour, setFocusHour] = useState(() => new Date().getHours()); // Which hour to focus on in hour-focus mode
+  const isHourFocus = ZOOM_LEVELS[zoomLevel].hourFocus && view === 'day';
   const HOUR_HEIGHT = (view === 'day' || view === 'week') ? ZOOM_LEVELS[zoomLevel].hourHeight : 60;
   const SLOT_HEIGHT = HOUR_HEIGHT / 60; // px per minute
 
@@ -442,20 +451,39 @@ export default function ShortTermCalendar() {
     }
   };
 
+  // Scroll to focused hour when hour-focus mode is active or focusHour changes
+  useEffect(() => {
+    if (isHourFocus && calendarRef.current) {
+      const targetTop = focusHour * HOUR_HEIGHT;
+      calendarRef.current.scrollTop = targetTop;
+    }
+  }, [focusHour, isHourFocus, HOUR_HEIGHT]);
+
   // Render time grid with tasks
   const renderTimeGrid = (dates, showTimeColumn = true) => {
     const isMultiDay = dates.length > 1;
 
+    // In hour-focus mode, show focused hour + 15 min padding each side
+    const hourFocusStyle = isHourFocus ? {
+      height: `${HOUR_HEIGHT + SLOT_HEIGHT * 30}px`, // 1 hour + 30min padding
+      overflow: 'hidden',
+    } : {};
+
+    // Which hours to render time labels for
+    const hoursToRender = isHourFocus
+      ? Array.from({ length: 3 }, (_, i) => Math.max(0, Math.min(23, focusHour - 1 + i))) // focused ±1
+      : Array.from({ length: 24 }, (_, i) => i);
+
     return (
-      <div className="time-grid-container" ref={calendarRef}>
-        <div className={`time-grid ${isMultiDay ? 'multi-day' : 'single-day'}`} style={{ minHeight: `${24 * HOUR_HEIGHT}px` }}>
+      <div className={`time-grid-container ${isHourFocus ? 'hour-focus-mode' : ''}`} ref={calendarRef} style={isHourFocus ? { overflow: 'hidden' } : {}}>
+        <div className={`time-grid ${isMultiDay ? 'multi-day' : 'single-day'}`} style={isHourFocus ? { minHeight: `${HOUR_HEIGHT * 3}px`, position: 'relative' } : { minHeight: `${24 * HOUR_HEIGHT}px` }}>
           {/* Time labels column */}
           {showTimeColumn && (
             <div className="time-labels">
-              {Array.from({ length: 24 }, (_, hour) => (
+              {hoursToRender.map((hour) => (
                 <div
                   key={hour}
-                  className="time-label"
+                  className={`time-label ${isHourFocus && hour === focusHour ? 'focused' : ''}`}
                   style={{ height: HOUR_HEIGHT }}
                 >
                   {format(setHours(new Date(), hour), 'h a')}
@@ -467,7 +495,23 @@ export default function ShortTermCalendar() {
           {/* Day columns */}
           {dates.map((date) => {
             const dayTasks = getTasksForDate(date);
+            // In hour-focus mode, filter to tasks that overlap the focused hour window
+            const visibleTasks = isHourFocus
+              ? dayTasks.filter((task) => {
+                  if (!task.startTime || !task.endTime) return false;
+                  const [sH, sM] = task.startTime.split(':').map(Number);
+                  const [eH, eM] = task.endTime.split(':').map(Number);
+                  const taskStart = sH * 60 + sM;
+                  const taskEnd = eH * 60 + eM;
+                  const windowStart = Math.max(0, (focusHour - 1)) * 60;
+                  const windowEnd = Math.min(24, focusHour + 2) * 60;
+                  return taskEnd > windowStart && taskStart < windowEnd;
+                })
+              : dayTasks;
             const showIndicator = isToday(date);
+
+            // In hour-focus mode, offset the tasks so focused hour starts at top
+            const focusOffset = isHourFocus ? Math.max(0, focusHour - 1) * 60 * SLOT_HEIGHT : 0;
 
             return (
               <div key={date.toISOString()} className="day-column">
@@ -483,18 +527,33 @@ export default function ShortTermCalendar() {
                 <div
                   className="day-slots"
                   onClick={(e) => handleSlotClick(date, e)}
+                  style={isHourFocus ? { position: 'relative' } : {}}
                 >
                   {/* Hour lines */}
-                  {Array.from({ length: 24 }, (_, hour) => (
+                  {hoursToRender.map((hour) => (
                     <div
                       key={hour}
-                      className="hour-slot"
+                      className={`hour-slot ${isHourFocus && hour === focusHour ? 'focused-hour' : ''}`}
                       style={{ height: HOUR_HEIGHT }}
                     >
-                      {/* 15-minute sub-lines */}
-                      <div className="quarter-line q1" />
-                      <div className="quarter-line q2" />
-                      <div className="quarter-line q3" />
+                      {/* Sub-lines: show 5-min lines in hour-focus mode, 15-min otherwise */}
+                      {isHourFocus ? (
+                        <>
+                          {Array.from({ length: 11 }, (_, i) => (
+                            <div
+                              key={i}
+                              className={`sub-line ${(i + 1) % 3 === 0 ? 'q-major' : 'q-minor'}`}
+                              style={{ top: `${((i + 1) / 12) * 100}%` }}
+                            />
+                          ))}
+                        </>
+                      ) : (
+                        <>
+                          <div className="quarter-line q1" />
+                          <div className="quarter-line q2" />
+                          <div className="quarter-line q3" />
+                        </>
+                      )}
                     </div>
                   ))}
 
@@ -503,17 +562,26 @@ export default function ShortTermCalendar() {
                     <div
                       ref={timeIndicatorRef}
                       className="current-time-indicator"
-                      style={{ top: getCurrentTimePosition() }}
+                      style={{ top: isHourFocus ? getCurrentTimePosition() - focusOffset : getCurrentTimePosition() }}
                     >
                       <div className="time-indicator-dot" />
                       <div className="time-indicator-line" />
+                      {isHourFocus && (
+                        <span className="time-indicator-label">{format(currentTime, 'h:mm a')}</span>
+                      )}
                     </div>
                   )}
 
                   {/* Tasks */}
-                  {dayTasks.map((task) => {
-                    const taskStyle = getTaskStyle(task);
+                  {visibleTasks.map((task) => {
+                    const rawStyle = getTaskStyle(task);
+                    // In hour-focus mode, offset top position
+                    const taskStyle = isHourFocus ? {
+                      ...rawStyle,
+                      top: `${parseFloat(rawStyle.top) - focusOffset}px`,
+                    } : rawStyle;
                     const isZoomedIn = HOUR_HEIGHT >= 120;
+                    const isDeepZoom = HOUR_HEIGHT >= 360;
                     const durationCls = getDurationClass(task);
                     const customColor = getEventColor(task);
                     const colorStyle = customColor ? {
@@ -524,39 +592,71 @@ export default function ShortTermCalendar() {
                       borderLeftStyle: 'solid',
                       color: customColor.text,
                     } : taskStyle;
+
+                    // Smart text: calculate how much content to show based on box pixel height
+                    const [sH, sM] = (task.startTime || '0:0').split(':').map(Number);
+                    const [eH, eM] = (task.endTime || '0:0').split(':').map(Number);
+                    const durationMin = Math.max(15, (eH * 60 + eM) - (sH * 60 + sM));
+                    const boxHeightPx = durationMin * SLOT_HEIGHT;
+                    // Determine content level based on available pixel height
+                    // < 28px = time only, < 50px = time + truncated title, >= 50px = full content
+                    const showTitle = boxHeightPx >= 28;
+                    const showFullTitle = boxHeightPx >= 60 || isZoomedIn;
+                    const showDescription = (boxHeightPx >= 120 || isDeepZoom) && task.description;
+                    // For very tiny events, combine time+title on one line
+                    const compactMode = boxHeightPx < 40 && !isZoomedIn;
+
                     return (
                       <div
                         key={task.id}
-                        className={`calendar-task ${!customColor ? `priority-${task.priority}` : ''} type-${task.type} ${task.completed ? 'completed' : ''} ${isZoomedIn ? 'zoomed' : ''} ${customColor ? 'custom-color' : ''} ${durationCls}`}
+                        className={`calendar-task ${!customColor ? `priority-${task.priority}` : ''} type-${task.type} ${task.completed ? 'completed' : ''} ${isZoomedIn ? 'zoomed' : ''} ${isDeepZoom ? 'deep-zoom' : ''} ${customColor ? 'custom-color' : ''} ${durationCls} ${compactMode ? 'compact' : ''}`}
                         style={colorStyle}
                         onClick={(e) => handleTaskClick(task, e)}
-                        title={`${task.title} (${task.startTime} - ${task.endTime})`}
+                        title={`${task.title}\n${task.startTime} - ${task.endTime}${task.description ? '\n' + task.description : ''}`}
                       >
-                        <div className="task-top-bar">
-                          {task.type === 'routine' && (
-                            <span
-                              className="routine-task-check"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                toggleTaskComplete(task.id);
-                              }}
-                            >
-                              {task.completed ? <CheckCircle2 size={isZoomedIn ? 16 : 12} /> : <Circle size={isZoomedIn ? 16 : 12} />}
-                            </span>
-                          )}
-                          <span className="task-time">{task.startTime} - {task.endTime}</span>
-                          <span className="task-icons-right">
-                            {task.type === 'routine' && task.reminder && (
-                              <Bell size={isZoomedIn ? 12 : 9} className="task-reminder-icon" />
+                        {compactMode ? (
+                          /* Compact: single line with time and truncated title */
+                          <div className="task-compact-line">
+                            {task.type === 'routine' && (
+                              <span
+                                className="routine-task-check"
+                                onClick={(e) => { e.stopPropagation(); toggleTaskComplete(task.id); }}
+                              >
+                                {task.completed ? <CheckCircle2 size={10} /> : <Circle size={10} />}
+                              </span>
                             )}
-                            {task.recurrence && task.recurrence !== 'none' && (
-                              <Repeat size={isZoomedIn ? 12 : 10} className="task-recurrence-icon" />
+                            <span className="task-time">{task.startTime}</span>
+                            {showTitle && <span className="task-title">{task.title}</span>}
+                          </div>
+                        ) : (
+                          /* Normal: structured layout */
+                          <>
+                            <div className="task-top-bar">
+                              {task.type === 'routine' && (
+                                <span
+                                  className="routine-task-check"
+                                  onClick={(e) => { e.stopPropagation(); toggleTaskComplete(task.id); }}
+                                >
+                                  {task.completed ? <CheckCircle2 size={isDeepZoom ? 18 : isZoomedIn ? 16 : 12} /> : <Circle size={isDeepZoom ? 18 : isZoomedIn ? 16 : 12} />}
+                                </span>
+                              )}
+                              <span className="task-time">{task.startTime} - {task.endTime}</span>
+                              <span className="task-icons-right">
+                                {task.type === 'routine' && task.reminder && (
+                                  <Bell size={isDeepZoom ? 14 : isZoomedIn ? 12 : 9} className="task-reminder-icon" />
+                                )}
+                                {task.recurrence && task.recurrence !== 'none' && (
+                                  <Repeat size={isDeepZoom ? 14 : isZoomedIn ? 12 : 10} className="task-recurrence-icon" />
+                                )}
+                              </span>
+                            </div>
+                            {showTitle && (
+                              <span className={`task-title ${showFullTitle ? 'full' : ''}`}>{task.title}</span>
                             )}
-                          </span>
-                        </div>
-                        <span className="task-title">{task.title}</span>
-                        {isZoomedIn && task.description && (
-                          <span className="task-description-preview">{task.description}</span>
+                            {showDescription && (
+                              <span className="task-description-preview">{task.description}</span>
+                            )}
+                          </>
                         )}
                       </div>
                     );
@@ -658,7 +758,7 @@ export default function ShortTermCalendar() {
                 onChange={(e) => setEventForm({ ...eventForm, title: e.target.value })}
                 placeholder="Enter event title..."
                 autoFocus
-                rows={3}
+                rows={4}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
@@ -1045,7 +1145,14 @@ export default function ShortTermCalendar() {
             <div className="zoom-controls">
               <button
                 className="zoom-btn"
-                onClick={() => setZoomLevel(Math.max(0, zoomLevel - 1))}
+                onClick={() => {
+                  const newLevel = Math.max(0, zoomLevel - 1);
+                  setZoomLevel(newLevel);
+                  // When entering hour-focus, set focus to current hour
+                  if (ZOOM_LEVELS[newLevel].hourFocus && !ZOOM_LEVELS[zoomLevel].hourFocus) {
+                    setFocusHour(new Date().getHours());
+                  }
+                }}
                 disabled={zoomLevel === 0}
                 title="Zoom out"
               >
@@ -1054,11 +1161,52 @@ export default function ShortTermCalendar() {
               <span className="zoom-label">{ZOOM_LEVELS[zoomLevel].label}</span>
               <button
                 className="zoom-btn"
-                onClick={() => setZoomLevel(Math.min(ZOOM_LEVELS.length - 1, zoomLevel + 1))}
-                disabled={zoomLevel === ZOOM_LEVELS.length - 1}
+                onClick={() => {
+                  const maxLevel = view === 'week' ? 5 : ZOOM_LEVELS.length - 1; // Limit week view zoom
+                  const newLevel = Math.min(maxLevel, zoomLevel + 1);
+                  setZoomLevel(newLevel);
+                  // When entering hour-focus, set focus to current hour
+                  if (ZOOM_LEVELS[newLevel].hourFocus && !ZOOM_LEVELS[zoomLevel].hourFocus) {
+                    setFocusHour(new Date().getHours());
+                  }
+                }}
+                disabled={zoomLevel === (view === 'week' ? 5 : ZOOM_LEVELS.length - 1)}
                 title="Zoom in"
               >
                 <ZoomIn size={14} />
+              </button>
+            </div>
+          )}
+
+          {/* Hour Focus Navigation — only in Day view at deep zoom */}
+          {isHourFocus && (
+            <div className="hour-focus-controls">
+              <button
+                className="hour-nav-btn"
+                onClick={() => setFocusHour(Math.max(0, focusHour - 1))}
+                disabled={focusHour === 0}
+                title="Previous hour"
+              >
+                <ChevronUp size={14} />
+              </button>
+              <span className="hour-focus-label">
+                <Crosshair size={12} />
+                {format(setHours(new Date(), focusHour), 'h a')} — {format(setHours(new Date(), Math.min(23, focusHour + 1)), 'h a')}
+              </span>
+              <button
+                className="hour-nav-btn"
+                onClick={() => setFocusHour(Math.min(23, focusHour + 1))}
+                disabled={focusHour === 23}
+                title="Next hour"
+              >
+                <ChevronDown size={14} />
+              </button>
+              <button
+                className="hour-now-btn"
+                onClick={() => setFocusHour(new Date().getHours())}
+                title="Jump to current hour"
+              >
+                Now
               </button>
             </div>
           )}
