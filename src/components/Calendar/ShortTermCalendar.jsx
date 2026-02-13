@@ -266,6 +266,9 @@ export default function ShortTermCalendar() {
   };
 
   // Calculate task position and height based on time (1-minute precision)
+  // GAP_PX creates visible separation between consecutive events
+  const GAP_PX = HOUR_HEIGHT >= 360 ? 10 : HOUR_HEIGHT >= 120 ? 6 : 4;
+
   const getTaskStyle = (task) => {
     if (!task.startTime || !task.endTime) return {};
 
@@ -278,9 +281,11 @@ export default function ShortTermCalendar() {
     const heightPx = duration * SLOT_HEIGHT;
 
     return {
-      top: `${startMinutes * SLOT_HEIGHT}px`,
-      height: `${heightPx - 4}px`, // 4px gap between stacked events
-      minHeight: `${Math.max(28, heightPx - 4)}px`, // Ensure minimum readable height
+      // Offset top by half the gap so events don't touch the hour line directly
+      top: `${startMinutes * SLOT_HEIGHT + GAP_PX / 2}px`,
+      // Shrink height by full gap amount to create space between back-to-back events
+      height: `${Math.max(20, heightPx - GAP_PX)}px`,
+      minHeight: `${Math.max(20, heightPx - GAP_PX)}px`,
     };
   };
 
@@ -584,12 +589,14 @@ export default function ShortTermCalendar() {
                     const isDeepZoom = HOUR_HEIGHT >= 360;
                     const durationCls = getDurationClass(task);
                     const customColor = getEventColor(task);
+                    // For custom colors: set background at higher opacity + matching border on all sides
                     const colorStyle = customColor ? {
                       ...taskStyle,
-                      background: customColor.bg,
-                      borderLeftColor: customColor.border,
+                      background: customColor.bg.replace('0.25)', '0.5)'),
+                      borderColor: customColor.border + '99', // ~60% opacity border on all sides
+                      borderLeftColor: customColor.border,     // full opacity on left accent
                       borderLeftWidth: '5px',
-                      borderLeftStyle: 'solid',
+                      borderStyle: 'solid',
                       color: customColor.text,
                     } : taskStyle;
 

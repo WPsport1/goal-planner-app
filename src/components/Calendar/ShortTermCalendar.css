@@ -279,17 +279,17 @@
 .day-slots {
   flex: 1;
   position: relative;
-  background: var(--bg-secondary);
+  background: var(--bg-primary, #0f0f14);
   cursor: pointer;
 }
 
 .day-slots:hover {
-  background: var(--bg-tertiary);
+  background: var(--bg-secondary);
 }
 
 /* Hour slots */
 .hour-slot {
-  border-bottom: 1px solid var(--border-primary);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   position: relative;
 }
 
@@ -344,31 +344,40 @@
   box-shadow: 0 0 8px rgba(239, 68, 68, 0.4);
 }
 
-/* Calendar Tasks — DISTINCT event boxes with strong visual separation */
+/* =============================================
+   Calendar Tasks — DISTINCT event cards
+   Each event is a clearly bordered, opaque card
+   with visible separation from adjacent events
+   ============================================= */
 .calendar-task {
   position: absolute;
-  left: 6px;
-  right: 6px;
-  border-radius: 8px;
-  padding: 0.35rem 0.6rem;
+  left: 8px;
+  right: 8px;
+  border-radius: 6px;
+  padding: 0.3rem 0.5rem;
   overflow: hidden;
   cursor: pointer;
   transition: all 0.15s ease;
   z-index: 5;
-  min-height: 24px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.25), 0 0 0 1px rgba(255, 255, 255, 0.08);
-  border-top: 1px solid rgba(255, 255, 255, 0.12);
+  min-height: 20px;
+  /* SOLID background + full border on all sides for clear separation */
+  border: 1.5px solid rgba(255, 255, 255, 0.18);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   display: flex;
   flex-direction: column;
   justify-content: flex-start;
   gap: 1px;
+  /* Prevent blending — events must look like distinct cards */
+  backdrop-filter: none;
+  isolation: isolate;
 }
 
 .calendar-task:hover {
   z-index: 15;
   filter: brightness(1.15);
-  transform: translateX(2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4), 0 0 0 2px rgba(255, 255, 255, 0.15);
+  transform: scale(1.01) translateX(1px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5), 0 0 0 2px rgba(255, 255, 255, 0.2);
+  border-color: rgba(255, 255, 255, 0.3);
 }
 
 .calendar-task.completed {
@@ -391,28 +400,36 @@
   opacity: 0.7;
 }
 
-/* Priority-based colors — HIGH contrast, SOLID backgrounds */
+/* Priority-based colors — HIGHER opacity for distinct cards */
 .calendar-task.priority-high {
-  background: rgba(239, 68, 68, 0.35);
+  background: rgba(239, 68, 68, 0.5);
   border-left: 5px solid #ef4444;
+  border-color: rgba(239, 68, 68, 0.6);
+  border-left-color: #ef4444;
   color: #fecaca;
 }
 
 .calendar-task.priority-medium {
-  background: rgba(245, 158, 11, 0.35);
+  background: rgba(245, 158, 11, 0.5);
   border-left: 5px solid #f59e0b;
+  border-color: rgba(245, 158, 11, 0.55);
+  border-left-color: #f59e0b;
   color: #fef3c7;
 }
 
 .calendar-task.priority-low {
-  background: rgba(34, 197, 94, 0.35);
+  background: rgba(34, 197, 94, 0.5);
   border-left: 5px solid #22c55e;
+  border-color: rgba(34, 197, 94, 0.55);
+  border-left-color: #22c55e;
   color: #bbf7d0;
 }
 
-/* Custom color events override priority colors */
+/* Custom color events — also need strong borders */
 .calendar-task.custom-color {
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3), 0 0 0 1px rgba(255, 255, 255, 0.1);
+  border-width: 1.5px;
+  border-style: solid;
+  border-left-width: 5px;
 }
 
 /* Task type variations */
@@ -422,7 +439,7 @@
 }
 
 .calendar-task.type-habit {
-  border-radius: 12px;
+  border-radius: 10px;
 }
 
 .calendar-task.type-routine {
@@ -431,8 +448,11 @@
 
 /* Duration-based sizing classes — scale padding & fonts proportionally */
 .calendar-task.duration-tiny {
-  padding: 0.1rem 0.35rem;
+  padding: 0.1rem 0.3rem;
   gap: 0;
+  border-radius: 4px;
+  border-width: 1px;
+  border-left-width: 4px;
 }
 
 .calendar-task.duration-tiny .task-title {
@@ -445,8 +465,9 @@
 }
 
 .calendar-task.duration-short {
-  padding: 0.2rem 0.45rem;
+  padding: 0.15rem 0.4rem;
   gap: 0;
+  border-radius: 5px;
 }
 
 .calendar-task.duration-short .task-title {
@@ -454,17 +475,21 @@
 }
 
 .calendar-task.duration-medium {
-  padding: 0.35rem 0.6rem;
+  padding: 0.3rem 0.5rem;
 }
 
 .calendar-task.duration-long {
-  padding: 0.5rem 0.7rem;
+  padding: 0.45rem 0.65rem;
   border-left-width: 6px;
+  border-radius: 7px;
+  border-width: 2px;
 }
 
 .calendar-task.duration-extra-long {
-  padding: 0.6rem 0.75rem;
+  padding: 0.55rem 0.7rem;
   border-left-width: 7px;
+  border-radius: 8px;
+  border-width: 2px;
 }
 
 .calendar-task.duration-long .task-title,
@@ -539,11 +564,13 @@
   overflow: hidden;
 }
 
-/* Zoomed-in task styles — show full text */
+/* Zoomed-in task styles — show full text, stronger card look */
 .calendar-task.zoomed {
-  padding: 0.6rem 0.75rem;
-  border-radius: 10px;
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
   gap: 0.2rem;
+  border-width: 2px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .calendar-task.zoomed .task-top-bar {
@@ -571,12 +598,14 @@
   font-size: 1.1rem;
 }
 
-/* Deep zoom — even larger, full detail */
+/* Deep zoom — even larger, full detail, very strong card */
 .calendar-task.deep-zoom {
-  padding: 0.8rem 1rem;
-  border-radius: 12px;
+  padding: 0.75rem 0.9rem;
+  border-radius: 10px;
   gap: 0.35rem;
   border-left-width: 7px;
+  border-width: 2.5px;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 .calendar-task.deep-zoom .task-time {
