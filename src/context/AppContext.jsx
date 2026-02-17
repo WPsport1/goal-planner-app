@@ -171,158 +171,59 @@ export function AppProvider({ children }) {
   const [showWeeklyPlanning, setShowWeeklyPlanning] = useState(false);
   const [weeklyPlanningData, setWeeklyPlanningData] = useState(null);
 
-  // Load data on mount
+  // Load data on mount — localStorage is ALWAYS the source of truth.
+  // Supabase cloud sync is a background enhancement, never blocks or overwrites local data.
   useEffect(() => {
-    const loadData = async () => {
-      console.log('[AppContext] loadData starting, isConfigured:', isConfigured, 'user:', !!user);
+    const loadData = () => {
+      console.log('[AppContext] loadData starting — localStorage-first mode');
       setIsLoading(true);
       setSyncError(null);
 
       try {
         // =============================================
-        // ALWAYS load from localStorage FIRST as the
-        // source of truth, regardless of Supabase config.
-        // Supabase is treated as an OPTIONAL cloud backup.
+        // STEP 1: Always load from localStorage ONLY.
+        // This is the single source of truth.
         // =============================================
-        const localGoals = safeLocalGet('goals', null);
-        const localTasks = safeLocalGet('tasks', null);
-        const localReflections = safeLocalGet('reflections', []);
+        const savedGoals = safeLocalGet('goals', null);
+        const savedTasks = safeLocalGet('tasks', null);
+        const savedReflections = safeLocalGet('reflections', []);
 
-        console.log('[AppContext] localStorage check — goals:', localGoals?.length ?? 'null', 'tasks:', localTasks?.length ?? 'null');
+        console.log('[AppContext] localStorage — goals:', savedGoals?.length ?? 'null', 'tasks:', savedTasks?.length ?? 'null');
 
-        // If using cloud sync with authenticated user
-        if (isConfigured && user) {
-          console.log('[AppContext] Supabase is configured, attempting cloud load...');
-          // Load from Supabase - core data
-          const [goalsResult, tasksResult, reflectionsResult] = await Promise.all([
-            goalService.getAll(user.id),
-            taskService.getAll(user.id),
-            reflectionService.getAll(user.id),
-          ]);
-
-          if (goalsResult.error) throw new Error(goalsResult.error);
-          if (tasksResult.error) throw new Error(tasksResult.error);
-          // Don't throw on reflection error - table might not exist yet
-          if (reflectionsResult.error) {
-            console.warn('Reflections not loaded:', reflectionsResult.error);
-          }
-
-          const cloudHasGoals = goalsResult.data && goalsResult.data.length > 0;
-          const cloudHasTasks = tasksResult.data && tasksResult.data.length > 0;
-          const localHasGoals = localGoals !== null && Array.isArray(localGoals) && localGoals.length > 0;
-          const localHasTasks = localTasks !== null && Array.isArray(localTasks) && localTasks.length > 0;
-
-          console.log('[AppContext] Cloud data — goals:', goalsResult.data?.length, 'tasks:', tasksResult.data?.length);
-          console.log('[AppContext] Local data — goals:', localGoals?.length ?? 0, 'tasks:', localTasks?.length ?? 0);
-
-          if (cloudHasGoals || cloudHasTasks) {
-            // Cloud has data — use it
-            console.log('[AppContext] Using cloud data');
-            setGoals(goalsResult.data.map(transformGoalFromDB));
-            setTasks(tasksResult.data.map(transformTaskFromDB));
-            if (reflectionsResult.data) {
-              setReflections(reflectionsResult.data.map(transformReflectionFromDB));
-            }
-          } else if (localHasGoals || localHasTasks) {
-            // Cloud is empty BUT localStorage has data — USE LOCAL DATA
-            // This is the critical fix: don't overwrite local data with sample data
-            console.log('[AppContext] Cloud empty, but localStorage has data — using local data');
-            setGoals(localHasGoals ? localGoals : []);
-            setTasks(localHasTasks ? localTasks : []);
-            if (Array.isArray(localReflections)) {
-              setReflections(localReflections);
-            }
-          } else {
-            // Both cloud and local are empty — new user, create sample data
-            console.log('[AppContext] Both cloud and local empty — creating sample data');
-            const sample = createSampleData();
-            setGoals(sample.goals);
-            setTasks(sample.tasks);
-            setReflections(sample.reflections);
-          }
-
-          // Load Phase 3 data (don't fail if tables don't exist yet)
-          try {
-            const [journalResult, lifeScoreResult, weeklyPlanResult, routinesResult] = await Promise.all([
-              journalService.getAll(user.id),
-              lifeScoreService.getAll(user.id),
-              weeklyPlanService.getAll(user.id),
-              routineService.getAll(user.id),
-            ]);
-
-            if (journalResult.data) {
-              setJournalEntries(journalResult.data.map(transformJournalFromDB));
-            }
-            if (lifeScoreResult.data && lifeScoreResult.data.length > 0) {
-              setLifeScoreData({
-                current: transformLifeScoreFromDB(lifeScoreResult.data[0]),
-                history: lifeScoreResult.data.map(transformLifeScoreFromDB),
-              });
-            }
-            if (weeklyPlanResult.data) {
-              setWeeklyPlanningData(weeklyPlanResult.data.map(transformWeeklyPlanFromDB));
-            }
-            if (routinesResult.data) {
-              const routinesObj = {};
-              routinesResult.data.forEach((r) => {
-                routinesObj[r.routine_key] = transformRoutineFromDB(r);
-              });
-              setRoutines(routinesObj);
-            }
-          } catch (phase3Err) {
-            console.warn('Phase 3 data not loaded (tables may not exist yet):', phase3Err);
-          }
+        if (savedGoals !== null && Array.isArray(savedGoals)) {
+          setGoals(savedGoals);
         } else {
-          // =============================================
-          // LOCAL-ONLY MODE — Load from localStorage
-          // =============================================
-          console.log('[AppContext] Loading from localStorage (local-only mode)');
+          // First time user — create sample data and save it immediately
+          console.log('[AppContext] No saved goals — creating sample data');
+          const sample = createSampleData();
+          setGoals(sample.goals);
+          safeLocalSet('goals', sample.goals);
+        }
 
-          const savedGoals = safeLocalGet('goals', null);
-          const savedTasks = safeLocalGet('tasks', null);
-          const savedReflections = safeLocalGet('reflections', []);
+        if (savedTasks !== null && Array.isArray(savedTasks)) {
+          setTasks(savedTasks);
+        } else {
+          console.log('[AppContext] No saved tasks — creating sample data');
+          const sample = createSampleData();
+          setTasks(sample.tasks);
+          safeLocalSet('tasks', sample.tasks);
+        }
 
-          if (savedGoals !== null && Array.isArray(savedGoals)) {
-            console.log('[AppContext] Loaded', savedGoals.length, 'goals from localStorage');
-            setGoals(savedGoals);
-          } else {
-            console.log('[AppContext] No saved goals found, creating sample data');
-            const sample = createSampleData();
-            setGoals(sample.goals);
-          }
-
-          if (savedTasks !== null && Array.isArray(savedTasks)) {
-            console.log('[AppContext] Loaded', savedTasks.length, 'tasks from localStorage');
-            setTasks(savedTasks);
-          } else {
-            console.log('[AppContext] No saved tasks found, creating sample data');
-            const sample = createSampleData();
-            setTasks(sample.tasks);
-          }
-
-          if (Array.isArray(savedReflections)) {
-            setReflections(savedReflections);
-          }
+        if (Array.isArray(savedReflections)) {
+          setReflections(savedReflections);
         }
       } catch (err) {
         console.error('[AppContext] Error loading data:', err);
         setSyncError(err.message);
-        // Fall back to localStorage with SAFE helpers
-        const savedGoals = safeLocalGet('goals', []);
-        const savedTasks = safeLocalGet('tasks', []);
-        const savedReflections = safeLocalGet('reflections', []);
-        setGoals(savedGoals);
-        setTasks(savedTasks);
-        setReflections(savedReflections);
       } finally {
         dataLoadedRef.current = true;
         setIsLoading(false);
-        console.log('[AppContext] loadData complete');
+        console.log('[AppContext] loadData complete, dataLoadedRef=true');
       }
     };
 
     loadData();
-  }, [user, isConfigured]);
+  }, []); // No dependencies — load once on mount, period.
 
   // =============================================
   // AUTO-SAVE to localStorage (backup, always runs)

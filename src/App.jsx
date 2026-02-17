@@ -1,3 +1,4 @@
+import React from 'react';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { AppProvider, useApp } from './context/AppContext';
 import { ThemeProvider } from './context/ThemeContext';
@@ -32,12 +33,34 @@ function LoadingScreen() {
   );
 }
 
+// Temporary debug banner — shows storage mode and data counts
+function DebugBanner() {
+  const { user, isConfigured } = useAuth();
+  const { goals, tasks, lastSaveStatus } = useApp();
+  const [dismissed, setDismissed] = React.useState(false);
+  if (dismissed) return null;
+  const mode = isConfigured && user ? 'Cloud+Local' : 'Local-Only';
+  const saveOk = lastSaveStatus?.success ? 'OK' : lastSaveStatus ? 'FAIL' : '—';
+  return (
+    <div style={{
+      position: 'fixed', top: 0, left: 0, right: 0, zIndex: 99999,
+      background: '#1a1a2e', color: '#0f0', padding: '4px 12px',
+      fontSize: '11px', fontFamily: 'monospace', display: 'flex',
+      justifyContent: 'space-between', alignItems: 'center',
+    }}>
+      <span>Mode: {mode} | Goals: {goals.length} | Tasks: {tasks.length} | Save: {saveOk} | Build: v6-localStorage-fix</span>
+      <button onClick={() => setDismissed(true)} style={{ background: 'none', border: 'none', color: '#0f0', cursor: 'pointer', fontSize: '11px' }}>dismiss</button>
+    </div>
+  );
+}
+
 // Main app content (when authenticated)
 function AppContent() {
   const { activeTab } = useApp();
 
   return (
     <>
+      <DebugBanner />
       <MainLayout
         leftPanel={activeTab === 'goals' ? <GoalList /> : <TaskList />}
         rightPanel={
@@ -63,19 +86,15 @@ function AppContent() {
 
 // Auth-aware wrapper
 function AuthenticatedApp() {
-  const { user, loading, isConfigured } = useAuth();
+  const { loading } = useAuth();
 
   // Show loading screen while checking auth
   if (loading) {
     return <LoadingScreen />;
   }
 
-  // If Supabase is configured but user isn't logged in, show auth page
-  if (isConfigured && !user) {
-    return <AuthPage />;
-  }
-
-  // Otherwise show the app (either logged in, or using local-only mode)
+  // Always show the app — localStorage works regardless of auth state.
+  // Cloud sync is an optional enhancement when user is logged in.
   return (
     <AppProvider>
       <AppContent />
