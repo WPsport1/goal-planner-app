@@ -140,6 +140,9 @@ export default function ShortTermCalendar() {
   const HOUR_HEIGHT = (view === 'day' || view === 'week') ? ZOOM_LEVELS[zoomLevel].hourHeight : 60;
   const SLOT_HEIGHT = HOUR_HEIGHT / 60; // px per minute
 
+  // Routine progress banner visibility (collapsed by default to prioritize calendar)
+  const [routineBannerOpen, setRoutineBannerOpen] = useState(false);
+
   // Routine progress tracking for today
   const todayRoutineTasks = useMemo(() => {
     const todayStr = format(new Date(), 'yyyy-MM-dd');
@@ -1219,53 +1222,55 @@ export default function ShortTermCalendar() {
         </div>
       </div>
 
-      {/* Routine Progress Banner */}
+      {/* Routine Progress — collapsed by default, toggle to expand */}
       {routineProgress && isToday(currentDate) && (
-        <div className="routine-progress-banner">
-          <div className="routine-banner-left">
-            <Sun size={16} />
-            <span className="routine-banner-title">Routine Progress</span>
-            <span className="routine-banner-count">
-              {routineProgress.completed}/{routineProgress.total} done
-            </span>
-          </div>
-          <div className="routine-progress-bar-container">
-            <div
-              className="routine-progress-bar-fill"
-              style={{ width: `${routineProgress.percentage}%` }}
-            />
-          </div>
-          <div className="routine-banner-right">
-            {routineProgress.percentage === 100 ? (
-              <span className="routine-complete-badge">
-                <CheckCircle2 size={14} />
-                All Done!
-              </span>
-            ) : routineProgress.currentTask ? (
-              <span className="routine-current-task">
-                <Bell size={12} className="pulse-icon" />
-                Now: {routineProgress.currentTask.title}
-              </span>
-            ) : routineProgress.nextTask ? (
-              <span className="routine-next-task">
-                Next: {routineProgress.nextTask.title} at {routineProgress.nextTask.startTime}
-              </span>
-            ) : null}
-          </div>
-          <div className="routine-checklist">
-            {todayRoutineTasks.map((task) => (
-              <button
-                key={task.id}
-                className={`routine-check-item ${task.completed ? 'checked' : ''}`}
-                onClick={() => toggleTaskComplete(task.id)}
-                title={task.title}
-              >
-                {task.completed ? <CheckCircle2 size={12} /> : <Circle size={12} />}
-                <span>{task.title}</span>
-                <span className="routine-check-time">{task.startTime}</span>
-              </button>
-            ))}
-          </div>
+        <div className={`routine-progress-banner ${routineBannerOpen ? 'expanded' : 'collapsed'}`}>
+          <button
+            className="routine-banner-toggle"
+            onClick={() => setRoutineBannerOpen(!routineBannerOpen)}
+          >
+            <Sun size={14} />
+            <span>Routine {routineProgress.completed}/{routineProgress.total}</span>
+            <div className="routine-mini-bar">
+              <div className="routine-mini-bar-fill" style={{ width: `${routineProgress.percentage}%` }} />
+            </div>
+            {routineBannerOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+          </button>
+          {routineBannerOpen && (
+            <div className="routine-banner-details">
+              <div className="routine-banner-right">
+                {routineProgress.percentage === 100 ? (
+                  <span className="routine-complete-badge">
+                    <CheckCircle2 size={14} />
+                    All Done!
+                  </span>
+                ) : routineProgress.currentTask ? (
+                  <span className="routine-current-task">
+                    <Bell size={12} className="pulse-icon" />
+                    Now: {routineProgress.currentTask.title}
+                  </span>
+                ) : routineProgress.nextTask ? (
+                  <span className="routine-next-task">
+                    Next: {routineProgress.nextTask.title} at {routineProgress.nextTask.startTime}
+                  </span>
+                ) : null}
+              </div>
+              <div className="routine-checklist">
+                {todayRoutineTasks.map((task) => (
+                  <button
+                    key={task.id}
+                    className={`routine-check-item ${task.completed ? 'checked' : ''}`}
+                    onClick={() => toggleTaskComplete(task.id)}
+                    title={task.title}
+                  >
+                    {task.completed ? <CheckCircle2 size={12} /> : <Circle size={12} />}
+                    <span>{task.title}</span>
+                    <span className="routine-check-time">{task.startTime}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
