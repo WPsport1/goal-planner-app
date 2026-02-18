@@ -48,7 +48,7 @@ function DebugBanner() {
       fontSize: '11px', fontFamily: 'monospace', display: 'flex',
       justifyContent: 'space-between', alignItems: 'center',
     }}>
-      <span>Mode: {mode} | Goals: {goals.length} | Tasks: {tasks.length} | Save: {saveOk} | Build: v6-localStorage-fix</span>
+      <span>Mode: {mode} | Goals: {goals.length} | Tasks: {tasks.length} | Save: {saveOk} | Build: v7-solid-cards</span>
       <button onClick={() => setDismissed(true)} style={{ background: 'none', border: 'none', color: '#0f0', cursor: 'pointer', fontSize: '11px' }}>dismiss</button>
     </div>
   );

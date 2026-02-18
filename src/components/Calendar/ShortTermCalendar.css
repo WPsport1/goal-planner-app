@@ -345,43 +345,49 @@
 }
 
 /* =============================================
-   Calendar Tasks — DISTINCT event cards
-   Each event is a clearly bordered, opaque card
-   with visible separation from adjacent events
+   Calendar Tasks — SOLID OPAQUE event cards
+   Inspired by TickTick / Google Calendar:
+   - Fully opaque colored backgrounds (no grid bleed-through)
+   - White/light text on solid color
+   - Left accent stripe
+   - Visible gap between all events
    ============================================= */
 .calendar-task {
   position: absolute;
-  left: 8px;
-  right: 8px;
+  left: 6px;
+  right: 6px;
   border-radius: 6px;
-  padding: 0.3rem 0.5rem;
+  padding: 0.25rem 0.5rem 0.25rem 0.5rem;
   overflow: hidden;
   cursor: pointer;
   transition: all 0.15s ease;
   z-index: 5;
-  min-height: 20px;
-  /* SOLID background + full border on all sides for clear separation */
-  border: 1.5px solid rgba(255, 255, 255, 0.18);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  min-height: 18px;
+  /* Solid left accent border */
+  border-left: 4px solid currentColor;
+  /* No other borders — the solid background IS the card */
+  border-top: none;
+  border-right: none;
+  border-bottom: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
   display: flex;
   flex-direction: column;
-  justify-content: flex-start;
+  justify-content: center;
   gap: 1px;
-  /* Prevent blending — events must look like distinct cards */
-  backdrop-filter: none;
-  isolation: isolate;
+  /* All text is white/near-white */
+  color: #fff;
 }
 
 .calendar-task:hover {
   z-index: 15;
-  filter: brightness(1.15);
-  transform: scale(1.01) translateX(1px);
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5), 0 0 0 2px rgba(255, 255, 255, 0.2);
-  border-color: rgba(255, 255, 255, 0.3);
+  filter: brightness(1.12);
+  transform: translateX(2px);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.5);
 }
 
 .calendar-task.completed {
-  opacity: 0.4;
+  opacity: 0.35;
+  text-decoration: line-through;
 }
 
 /* Top bar inside each event — time + icons row */
@@ -397,45 +403,38 @@
   align-items: center;
   gap: 0.2rem;
   margin-left: auto;
-  opacity: 0.7;
+  opacity: 0.75;
 }
 
-/* Priority-based colors — HIGHER opacity for distinct cards */
+/* ==========================================
+   Priority colors — SOLID OPAQUE backgrounds
+   These are the actual card colors, not overlays
+   ========================================== */
 .calendar-task.priority-high {
-  background: rgba(239, 68, 68, 0.5);
-  border-left: 5px solid #ef4444;
-  border-color: rgba(239, 68, 68, 0.6);
-  border-left-color: #ef4444;
-  color: #fecaca;
+  background: #dc2626;
+  border-left-color: #991b1b;
 }
 
 .calendar-task.priority-medium {
-  background: rgba(245, 158, 11, 0.5);
-  border-left: 5px solid #f59e0b;
-  border-color: rgba(245, 158, 11, 0.55);
-  border-left-color: #f59e0b;
-  color: #fef3c7;
+  background: #d97706;
+  border-left-color: #92400e;
 }
 
 .calendar-task.priority-low {
-  background: rgba(34, 197, 94, 0.5);
-  border-left: 5px solid #22c55e;
-  border-color: rgba(34, 197, 94, 0.55);
-  border-left-color: #22c55e;
-  color: #bbf7d0;
+  background: #16a34a;
+  border-left-color: #14532d;
 }
 
-/* Custom color events — also need strong borders */
+/* Custom color events */
 .calendar-task.custom-color {
-  border-width: 1.5px;
-  border-style: solid;
-  border-left-width: 5px;
+  border-left-width: 4px;
+  border-left-style: solid;
 }
 
 /* Task type variations */
 .calendar-task.type-appointment {
+  border-left-width: 5px;
   border-left-style: double;
-  border-left-width: 6px;
 }
 
 .calendar-task.type-habit {
@@ -443,67 +442,72 @@
 }
 
 .calendar-task.type-routine {
-  border-left-width: 6px;
+  border-left-width: 5px;
 }
 
-/* Duration-based sizing classes — scale padding & fonts proportionally */
+/* ==========================================
+   Duration-based sizing — proportional to time
+   Shorter events = tighter padding, smaller text
+   Longer events = more padding, bigger text
+   ========================================== */
 .calendar-task.duration-tiny {
-  padding: 0.1rem 0.3rem;
+  padding: 0px 0.3rem 0px 0.3rem;
   gap: 0;
   border-radius: 4px;
-  border-width: 1px;
-  border-left-width: 4px;
+  border-left-width: 3px;
+  justify-content: center;
 }
 
 .calendar-task.duration-tiny .task-title {
-  font-size: 0.65rem;
-  line-height: 1.1;
+  font-size: 0.6rem;
+  line-height: 1;
 }
 
 .calendar-task.duration-tiny .task-time {
-  font-size: 0.6rem;
+  font-size: 0.55rem;
 }
 
 .calendar-task.duration-short {
-  padding: 0.15rem 0.4rem;
+  padding: 0.1rem 0.4rem;
   gap: 0;
   border-radius: 5px;
 }
 
 .calendar-task.duration-short .task-title {
-  font-size: 0.72rem;
+  font-size: 0.7rem;
 }
 
 .calendar-task.duration-medium {
-  padding: 0.3rem 0.5rem;
+  padding: 0.25rem 0.5rem;
 }
 
 .calendar-task.duration-long {
-  padding: 0.45rem 0.65rem;
-  border-left-width: 6px;
+  padding: 0.4rem 0.6rem;
+  border-left-width: 5px;
   border-radius: 7px;
-  border-width: 2px;
+  gap: 2px;
 }
 
 .calendar-task.duration-extra-long {
-  padding: 0.55rem 0.7rem;
-  border-left-width: 7px;
+  padding: 0.5rem 0.65rem;
+  border-left-width: 6px;
   border-radius: 8px;
-  border-width: 2px;
+  gap: 3px;
 }
 
 .calendar-task.duration-long .task-title,
 .calendar-task.duration-extra-long .task-title {
   font-size: 0.9rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 /* Compact mode — single-line layout for very short events */
 .calendar-task.compact {
   flex-direction: row;
   align-items: center;
+  justify-content: flex-start;
   gap: 0.25rem;
-  padding: 0.1rem 0.35rem;
+  padding: 0px 0.3rem;
 }
 
 .calendar-task .task-compact-line {
@@ -515,15 +519,15 @@
 }
 
 .calendar-task .task-compact-line .task-time {
-  font-size: 0.6rem;
+  font-size: 0.55rem;
   font-weight: 700;
-  opacity: 0.85;
+  opacity: 0.9;
   flex-shrink: 0;
 }
 
 .calendar-task .task-compact-line .task-title {
-  font-size: 0.65rem;
-  font-weight: 700;
+  font-size: 0.6rem;
+  font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -531,10 +535,10 @@
   min-width: 0;
 }
 
-/* Task time — BOLDER & more visible */
+/* Task time */
 .calendar-task .task-time {
   font-size: 0.65rem;
-  font-weight: 700;
+  font-weight: 600;
   opacity: 0.9;
   letter-spacing: 0.02em;
   white-space: nowrap;
@@ -545,32 +549,29 @@
 .calendar-task .task-title {
   display: block;
   font-size: 0.8rem;
-  font-weight: 800;
+  font-weight: 700;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
-  line-height: 1.25;
+  line-height: 1.2;
 }
 
 /* When there's enough room, allow title to wrap */
 .calendar-task .task-title.full {
   white-space: normal;
-  overflow: visible;
-  text-overflow: unset;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
 }
 
-/* Zoomed-in task styles — show full text, stronger card look */
+/* Zoomed-in task styles */
 .calendar-task.zoomed {
-  padding: 0.5rem 0.65rem;
+  padding: 0.4rem 0.6rem;
   border-radius: 8px;
-  gap: 0.2rem;
-  border-width: 2px;
-  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  gap: 2px;
+  border-left-width: 5px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
 }
 
 .calendar-task.zoomed .task-top-bar {
@@ -579,7 +580,7 @@
 
 .calendar-task.zoomed .task-time {
   font-size: 0.8rem;
-  font-weight: 700;
+  font-weight: 600;
   opacity: 1;
 }
 
@@ -588,9 +589,8 @@
   overflow: visible;
   text-overflow: unset;
   font-size: 1rem;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.3;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }
 
 .calendar-task.zoomed.duration-long .task-title,
@@ -598,28 +598,26 @@
   font-size: 1.1rem;
 }
 
-/* Deep zoom — even larger, full detail, very strong card */
+/* Deep zoom — full detail */
 .calendar-task.deep-zoom {
-  padding: 0.75rem 0.9rem;
+  padding: 0.6rem 0.8rem;
   border-radius: 10px;
-  gap: 0.35rem;
-  border-left-width: 7px;
-  border-width: 2.5px;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  gap: 4px;
+  border-left-width: 6px;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.45);
 }
 
 .calendar-task.deep-zoom .task-time {
   font-size: 0.9rem;
-  font-weight: 700;
+  font-weight: 600;
 }
 
 .calendar-task.deep-zoom .task-title {
   font-size: 1.2rem;
-  font-weight: 800;
+  font-weight: 700;
   line-height: 1.35;
   white-space: normal;
   overflow: visible;
-  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
 }
 
 .calendar-task.deep-zoom.duration-long .task-title,
@@ -629,12 +627,12 @@
 
 .calendar-task.deep-zoom .task-description-preview {
   display: block;
-  font-size: 0.9rem;
+  font-size: 0.85rem;
   opacity: 0.85;
-  margin-top: 0.25rem;
+  margin-top: 0.15rem;
   white-space: normal;
   line-height: 1.4;
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .calendar-task .task-description-preview {
@@ -642,22 +640,21 @@
 }
 
 .calendar-task.zoomed .task-description-preview {
-  display: block;
+  display: -webkit-box;
   font-size: 0.8rem;
   opacity: 0.85;
-  margin-top: 0.2rem;
+  margin-top: 0.1rem;
   white-space: normal;
   line-height: 1.35;
-  font-weight: 500;
-  overflow: hidden;
-  display: -webkit-box;
+  font-weight: 400;
   -webkit-line-clamp: 4;
   -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .calendar-task .task-recurrence-icon,
 .calendar-task .task-reminder-icon {
-  opacity: 0.7;
+  opacity: 0.75;
   flex-shrink: 0;
 }
 
@@ -1457,9 +1454,9 @@
 /* Enhanced Routine Task Styling on Calendar */
 .calendar-task.type-routine:not(.custom-color) {
   border-left-width: 5px;
-  border-left-color: #f97316;
-  background: rgba(249, 115, 22, 0.2);
-  color: #fed7aa;
+  border-left-color: #9a3412;
+  background: #ea580c;
+  color: #fff;
 }
 
 .calendar-task.type-routine .routine-task-check {
