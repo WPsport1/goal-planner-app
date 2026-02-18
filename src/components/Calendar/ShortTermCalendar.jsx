@@ -270,9 +270,10 @@ export default function ShortTermCalendar() {
   };
 
   // Calculate task position and height based on time (1-minute precision)
-  // GAP_PX creates visible separation between consecutive events — like One Calendar,
-  // there must be a clear strip of grid background visible between back-to-back events.
-  const GAP_PX = HOUR_HEIGHT >= 360 ? 6 : HOUR_HEIGHT >= 120 ? 4 : 2;
+  // Like One Calendar / TickTick: event height is STRICTLY proportional to duration.
+  // A 6-minute event = 1/10th of an hour. A 30-minute event = half an hour.
+  // GAP_PX: visible grid strip between every event (top inset + bottom shrink).
+  const GAP_PX = 2; // pixels of grid visible between back-to-back events
 
   const getTaskStyle = (task) => {
     if (!task.startTime || !task.endTime) return {};
@@ -282,15 +283,16 @@ export default function ShortTermCalendar() {
 
     const startMinutes = startHour * 60 + startMinute;
     const endMinutes = endHour * 60 + endMinute;
-    const duration = Math.max(15, endMinutes - startMinutes); // Minimum 15 min display
+    // NO minimum duration override — actual duration drives the visual size
+    const duration = Math.max(1, endMinutes - startMinutes);
     const heightPx = duration * SLOT_HEIGHT;
 
     return {
-      // Offset top by 1px so the event doesn't sit exactly on the hour gridline
-      top: `${startMinutes * SLOT_HEIGHT + 1}px`,
-      // Shrink height by GAP_PX so back-to-back events have visible grid between them
-      height: `${Math.max(18, heightPx - GAP_PX)}px`,
-      minHeight: `${Math.max(18, heightPx - GAP_PX)}px`,
+      // Inset from top by GAP_PX so there's a strip of grid above this event
+      top: `${startMinutes * SLOT_HEIGHT + GAP_PX}px`,
+      // Shrink height by 2*GAP_PX (top + bottom inset) to show grid between events
+      height: `${Math.max(2, heightPx - GAP_PX * 2)}px`,
+      minHeight: `${Math.max(2, heightPx - GAP_PX * 2)}px`,
     };
   };
 
@@ -300,8 +302,8 @@ export default function ShortTermCalendar() {
     const [startH, startM] = task.startTime.split(':').map(Number);
     const [endH, endM] = task.endTime.split(':').map(Number);
     const duration = (endH * 60 + endM) - (startH * 60 + startM);
-    if (duration <= 15) return 'duration-tiny';
-    if (duration <= 30) return 'duration-short';
+    if (duration <= 10) return 'duration-tiny';
+    if (duration <= 25) return 'duration-short';
     if (duration <= 60) return 'duration-medium';
     if (duration <= 120) return 'duration-long';
     return 'duration-extra-long';
@@ -602,18 +604,21 @@ export default function ShortTermCalendar() {
                       color: '#fff',
                     } : taskStyle;
 
-                    // Smart text: calculate how much content to show based on box pixel height
+                    // Smart text: calculate how much content to show based on actual pixel height
                     const [sH, sM] = (task.startTime || '0:0').split(':').map(Number);
                     const [eH, eM] = (task.endTime || '0:0').split(':').map(Number);
-                    const durationMin = Math.max(15, (eH * 60 + eM) - (sH * 60 + sM));
+                    const durationMin = Math.max(1, (eH * 60 + eM) - (sH * 60 + sM));
                     const boxHeightPx = durationMin * SLOT_HEIGHT;
-                    // Determine content level based on available pixel height
-                    // < 28px = time only, < 50px = time + truncated title, >= 50px = full content
-                    const showTitle = boxHeightPx >= 28;
-                    const showFullTitle = boxHeightPx >= 60 || isZoomedIn;
-                    const showDescription = (boxHeightPx >= 120 || isDeepZoom) && task.description;
-                    // For very tiny events, combine time+title on one line
-                    const compactMode = boxHeightPx < 40 && !isZoomedIn;
+                    // Content levels based on available pixel height:
+                    // < 12px = nothing visible (just colored strip)
+                    // < 22px = compact single line (time + title crammed)
+                    // < 40px = time + truncated title
+                    // >= 40px = full content
+                    const showTitle = boxHeightPx >= 14;
+                    const showFullTitle = boxHeightPx >= 50 || isZoomedIn;
+                    const showDescription = (boxHeightPx >= 100 || isDeepZoom) && task.description;
+                    // Compact mode: single line for small events
+                    const compactMode = boxHeightPx < 30 && !isZoomedIn;
 
                     return (
                       <div
