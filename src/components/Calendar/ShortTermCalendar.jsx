@@ -267,8 +267,9 @@ export default function ShortTermCalendar() {
   };
 
   // Calculate task position and height based on time (1-minute precision)
-  // GAP_PX creates visible separation between consecutive events
-  const GAP_PX = HOUR_HEIGHT >= 360 ? 10 : HOUR_HEIGHT >= 120 ? 6 : 4;
+  // GAP_PX creates visible separation between consecutive events — like One Calendar,
+  // there must be a clear strip of grid background visible between back-to-back events.
+  const GAP_PX = HOUR_HEIGHT >= 360 ? 6 : HOUR_HEIGHT >= 120 ? 4 : 2;
 
   const getTaskStyle = (task) => {
     if (!task.startTime || !task.endTime) return {};
@@ -282,11 +283,11 @@ export default function ShortTermCalendar() {
     const heightPx = duration * SLOT_HEIGHT;
 
     return {
-      // Offset top by half the gap so events don't touch the hour line directly
-      top: `${startMinutes * SLOT_HEIGHT + GAP_PX / 2}px`,
-      // Shrink height by full gap amount to create space between back-to-back events
-      height: `${Math.max(20, heightPx - GAP_PX)}px`,
-      minHeight: `${Math.max(20, heightPx - GAP_PX)}px`,
+      // Offset top by 1px so the event doesn't sit exactly on the hour gridline
+      top: `${startMinutes * SLOT_HEIGHT + 1}px`,
+      // Shrink height by GAP_PX so back-to-back events have visible grid between them
+      height: `${Math.max(18, heightPx - GAP_PX)}px`,
+      minHeight: `${Math.max(18, heightPx - GAP_PX)}px`,
     };
   };
 
