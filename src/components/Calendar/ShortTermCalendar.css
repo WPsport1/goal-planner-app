@@ -653,6 +653,42 @@
   overflow: hidden;
 }
 
+/* Ultra zoom — maximum detail, everything readable */
+.calendar-task.ultra-zoom {
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  gap: 6px;
+  border-left-width: 7px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.calendar-task.ultra-zoom .task-time {
+  font-size: 1rem;
+  font-weight: 700;
+}
+
+.calendar-task.ultra-zoom .task-title {
+  font-size: 1.4rem;
+  font-weight: 700;
+  line-height: 1.35;
+  white-space: normal;
+  overflow: visible;
+}
+
+.calendar-task.ultra-zoom .task-description-preview {
+  display: block;
+  font-size: 1rem;
+  opacity: 0.9;
+  margin-top: 0.2rem;
+  white-space: normal;
+  line-height: 1.45;
+  font-weight: 400;
+}
+
+.calendar-task.ultra-zoom .task-top-bar {
+  gap: 0.5rem;
+}
+
 .calendar-task .task-recurrence-icon,
 .calendar-task .task-reminder-icon {
   opacity: 0.75;
@@ -751,7 +787,18 @@
 }
 
 .hour-slot .sub-line.q-major {
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.12);
+}
+
+/* Minute labels on sub-lines at deep zoom */
+.hour-slot .sub-line .sub-line-label {
+  position: absolute;
+  left: -52px;
+  top: -7px;
+  font-size: 0.6rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  pointer-events: none;
 }
 
 /* Focused time label */

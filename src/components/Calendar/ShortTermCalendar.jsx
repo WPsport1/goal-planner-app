@@ -69,16 +69,18 @@ const generateTimeSlots = () => {
 const TIME_SLOTS = generateTimeSlots();
 
 // Zoom presets: each level increases pixels-per-hour
-// Levels 0-4 = normal zoom, 5-7 = hour-focus zoom (single hour fills viewport)
+// Normal zoom: scrollable 24-hour view at various densities
+// Hour-focus: locks view to a small time window for maximum detail
 const ZOOM_LEVELS = [
-  { label: '1x', hourHeight: 60, hourFocus: false },
-  { label: '1.5x', hourHeight: 90, hourFocus: false },
-  { label: '2x', hourHeight: 120, hourFocus: false },
-  { label: '3x', hourHeight: 180, hourFocus: false },
-  { label: '4x', hourHeight: 240, hourFocus: false },
-  { label: '6x', hourHeight: 360, hourFocus: false },
-  { label: '10x', hourHeight: 600, hourFocus: true },
-  { label: '1hr', hourHeight: 900, hourFocus: true },
+  { label: '1x',   hourHeight: 60,   hourFocus: false },
+  { label: '1.5x', hourHeight: 90,   hourFocus: false },
+  { label: '2x',   hourHeight: 120,  hourFocus: false },
+  { label: '3x',   hourHeight: 180,  hourFocus: false },
+  { label: '5x',   hourHeight: 300,  hourFocus: false },
+  { label: '8x',   hourHeight: 480,  hourFocus: false },
+  { label: '12x',  hourHeight: 720,  hourFocus: true },  // ~2hr window, 12px/min
+  { label: '20x',  hourHeight: 1200, hourFocus: true },  // ~1hr window, 20px/min — a 5min event = 100px
+  { label: '30x',  hourHeight: 1800, hourFocus: true },  // 30min window, 30px/min — a 4min event = 120px
 ];
 
 // Recurrence options
@@ -475,20 +477,24 @@ export default function ShortTermCalendar() {
   const renderTimeGrid = (dates, showTimeColumn = true) => {
     const isMultiDay = dates.length > 1;
 
-    // In hour-focus mode, show focused hour + 15 min padding each side
+    // In hour-focus mode, how many hours to show depends on zoom depth
+    // At 12x: show 3 hours (focus ± 1). At 20x: show 2 hours. At 30x: show 1 hour.
+    const focusWindowHours = HOUR_HEIGHT >= 1800 ? 1 : HOUR_HEIGHT >= 1200 ? 2 : 3;
+    const focusPaddingHours = Math.floor((focusWindowHours - 1) / 2); // hours before/after focus
+
     const hourFocusStyle = isHourFocus ? {
-      height: `${HOUR_HEIGHT + SLOT_HEIGHT * 30}px`, // 1 hour + 30min padding
+      height: `${focusWindowHours * HOUR_HEIGHT}px`,
       overflow: 'hidden',
     } : {};
 
     // Which hours to render time labels for
     const hoursToRender = isHourFocus
-      ? Array.from({ length: 3 }, (_, i) => Math.max(0, Math.min(23, focusHour - 1 + i))) // focused ±1
+      ? Array.from({ length: focusWindowHours }, (_, i) => Math.max(0, Math.min(23, focusHour - focusPaddingHours + i)))
       : Array.from({ length: 24 }, (_, i) => i);
 
     return (
       <div className={`time-grid-container ${isHourFocus ? 'hour-focus-mode' : ''}`} ref={calendarRef} style={isHourFocus ? { overflow: 'hidden' } : {}}>
-        <div className={`time-grid ${isMultiDay ? 'multi-day' : 'single-day'}`} style={isHourFocus ? { minHeight: `${HOUR_HEIGHT * 3}px`, position: 'relative' } : { minHeight: `${24 * HOUR_HEIGHT}px` }}>
+        <div className={`time-grid ${isMultiDay ? 'multi-day' : 'single-day'}`} style={isHourFocus ? { minHeight: `${HOUR_HEIGHT * focusWindowHours}px`, position: 'relative' } : { minHeight: `${24 * HOUR_HEIGHT}px` }}>
           {/* Time labels column */}
           {showTimeColumn && (
             <div className="time-labels">
@@ -515,15 +521,15 @@ export default function ShortTermCalendar() {
                   const [eH, eM] = task.endTime.split(':').map(Number);
                   const taskStart = sH * 60 + sM;
                   const taskEnd = eH * 60 + eM;
-                  const windowStart = Math.max(0, (focusHour - 1)) * 60;
-                  const windowEnd = Math.min(24, focusHour + 2) * 60;
+                  const windowStart = Math.max(0, focusHour - focusPaddingHours) * 60;
+                  const windowEnd = Math.min(24, focusHour + focusWindowHours - focusPaddingHours) * 60;
                   return taskEnd > windowStart && taskStart < windowEnd;
                 })
               : dayTasks;
             const showIndicator = isToday(date);
 
-            // In hour-focus mode, offset the tasks so focused hour starts at top
-            const focusOffset = isHourFocus ? Math.max(0, focusHour - 1) * 60 * SLOT_HEIGHT : 0;
+            // In hour-focus mode, offset the tasks so the visible window starts at top
+            const focusOffset = isHourFocus ? Math.max(0, focusHour - focusPaddingHours) * 60 * SLOT_HEIGHT : 0;
 
             return (
               <div key={date.toISOString()} className="day-column">
@@ -548,16 +554,39 @@ export default function ShortTermCalendar() {
                       className={`hour-slot ${isHourFocus && hour === focusHour ? 'focused-hour' : ''}`}
                       style={{ height: HOUR_HEIGHT }}
                     >
-                      {/* Sub-lines: show 5-min lines in hour-focus mode, 15-min otherwise */}
+                      {/* Sub-lines: at deep zoom show every 5 min, at medium zoom every 15 min */}
                       {isHourFocus ? (
                         <>
-                          {Array.from({ length: 11 }, (_, i) => (
-                            <div
-                              key={i}
-                              className={`sub-line ${(i + 1) % 3 === 0 ? 'q-major' : 'q-minor'}`}
-                              style={{ top: `${((i + 1) / 12) * 100}%` }}
-                            />
-                          ))}
+                          {Array.from({ length: 11 }, (_, i) => {
+                            const minute = (i + 1) * 5;
+                            const isMajor = minute % 15 === 0;
+                            return (
+                              <div key={i} className={`sub-line ${isMajor ? 'q-major' : 'q-minor'}`} style={{ top: `${(minute / 60) * 100}%` }}>
+                                {HOUR_HEIGHT >= 720 && isMajor && (
+                                  <span className="sub-line-label">:{minute.toString().padStart(2, '0')}</span>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </>
+                      ) : HOUR_HEIGHT >= 300 ? (
+                        /* At 5x+ zoom, show all 4 quarter lines plus extra at 10/20/40/50 */
+                        <>
+                          {Array.from({ length: 11 }, (_, i) => {
+                            const minute = (i + 1) * 5;
+                            const isMajor = minute % 15 === 0;
+                            const isHalf = minute === 30;
+                            return (
+                              <div
+                                key={i}
+                                className={`quarter-line ${isHalf ? 'q2' : isMajor ? 'q1' : ''}`}
+                                style={{
+                                  top: `${(minute / 60) * 100}%`,
+                                  background: isHalf ? 'rgba(255,255,255,0.1)' : isMajor ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.03)',
+                                }}
+                              />
+                            );
+                          })}
                         </>
                       ) : (
                         <>
@@ -593,7 +622,8 @@ export default function ShortTermCalendar() {
                       top: `${parseFloat(rawStyle.top) - focusOffset}px`,
                     } : rawStyle;
                     const isZoomedIn = HOUR_HEIGHT >= 120;
-                    const isDeepZoom = HOUR_HEIGHT >= 360;
+                    const isDeepZoom = HOUR_HEIGHT >= 480;
+                    const isUltraZoom = HOUR_HEIGHT >= 1200;
                     const durationCls = getDurationClass(task);
                     const customColor = getEventColor(task);
                     // For custom colors: solid opaque background + darker left accent
@@ -609,21 +639,17 @@ export default function ShortTermCalendar() {
                     const [eH, eM] = (task.endTime || '0:0').split(':').map(Number);
                     const durationMin = Math.max(1, (eH * 60 + eM) - (sH * 60 + sM));
                     const boxHeightPx = durationMin * SLOT_HEIGHT;
-                    // Content levels based on available pixel height:
-                    // < 12px = nothing visible (just colored strip)
-                    // < 22px = compact single line (time + title crammed)
-                    // < 40px = time + truncated title
-                    // >= 40px = full content
+                    // Content levels based on pixel height of this specific event:
                     const showTitle = boxHeightPx >= 14;
-                    const showFullTitle = boxHeightPx >= 50 || isZoomedIn;
-                    const showDescription = (boxHeightPx >= 100 || isDeepZoom) && task.description;
-                    // Compact mode: single line for small events
-                    const compactMode = boxHeightPx < 30 && !isZoomedIn;
+                    const showFullTitle = boxHeightPx >= 40;
+                    const showDescription = boxHeightPx >= 80 && task.description;
+                    // Compact single-line mode for events shorter than ~25px
+                    const compactMode = boxHeightPx < 25;
 
                     return (
                       <div
                         key={task.id}
-                        className={`calendar-task ${!customColor ? `priority-${task.priority}` : ''} type-${task.type} ${task.completed ? 'completed' : ''} ${isZoomedIn ? 'zoomed' : ''} ${isDeepZoom ? 'deep-zoom' : ''} ${customColor ? 'custom-color' : ''} ${durationCls} ${compactMode ? 'compact' : ''}`}
+                        className={`calendar-task ${!customColor ? `priority-${task.priority}` : ''} type-${task.type} ${task.completed ? 'completed' : ''} ${isZoomedIn ? 'zoomed' : ''} ${isDeepZoom ? 'deep-zoom' : ''} ${isUltraZoom ? 'ultra-zoom' : ''} ${customColor ? 'custom-color' : ''} ${durationCls} ${compactMode ? 'compact' : ''}`}
                         style={colorStyle}
                         onClick={(e) => handleTaskClick(task, e)}
                         title={`${task.title}\n${task.startTime} - ${task.endTime}${task.description ? '\n' + task.description : ''}`}
@@ -651,16 +677,16 @@ export default function ShortTermCalendar() {
                                   className="routine-task-check"
                                   onClick={(e) => { e.stopPropagation(); toggleTaskComplete(task.id); }}
                                 >
-                                  {task.completed ? <CheckCircle2 size={isDeepZoom ? 18 : isZoomedIn ? 16 : 12} /> : <Circle size={isDeepZoom ? 18 : isZoomedIn ? 16 : 12} />}
+                                  {task.completed ? <CheckCircle2 size={isUltraZoom ? 22 : isDeepZoom ? 18 : isZoomedIn ? 16 : 12} /> : <Circle size={isUltraZoom ? 22 : isDeepZoom ? 18 : isZoomedIn ? 16 : 12} />}
                                 </span>
                               )}
                               <span className="task-time">{task.startTime} - {task.endTime}</span>
                               <span className="task-icons-right">
                                 {task.type === 'routine' && task.reminder && (
-                                  <Bell size={isDeepZoom ? 14 : isZoomedIn ? 12 : 9} className="task-reminder-icon" />
+                                  <Bell size={isUltraZoom ? 18 : isDeepZoom ? 14 : isZoomedIn ? 12 : 9} className="task-reminder-icon" />
                                 )}
                                 {task.recurrence && task.recurrence !== 'none' && (
-                                  <Repeat size={isDeepZoom ? 14 : isZoomedIn ? 12 : 10} className="task-recurrence-icon" />
+                                  <Repeat size={isUltraZoom ? 18 : isDeepZoom ? 14 : isZoomedIn ? 12 : 10} className="task-recurrence-icon" />
                                 )}
                               </span>
                             </div>
@@ -1176,7 +1202,7 @@ export default function ShortTermCalendar() {
               <button
                 className="zoom-btn"
                 onClick={() => {
-                  const maxLevel = view === 'week' ? 5 : ZOOM_LEVELS.length - 1; // Limit week view zoom
+                  const maxLevel = view === 'week' ? 5 : ZOOM_LEVELS.length - 1; // Week view limited to 8x
                   const newLevel = Math.min(maxLevel, zoomLevel + 1);
                   setZoomLevel(newLevel);
                   // When entering hour-focus, set focus to current hour
@@ -1205,7 +1231,7 @@ export default function ShortTermCalendar() {
               </button>
               <span className="hour-focus-label">
                 <Crosshair size={12} />
-                {format(setHours(new Date(), focusHour), 'h a')} — {format(setHours(new Date(), Math.min(23, focusHour + 1)), 'h a')}
+                {format(setHours(new Date(), focusHour), 'h a')}{focusWindowHours > 1 ? ` — ${format(setHours(new Date(), Math.min(23, focusHour + focusWindowHours - 1)), 'h a')}` : ''}
               </span>
               <button
                 className="hour-nav-btn"
