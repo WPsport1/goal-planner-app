@@ -142,6 +142,44 @@ export default function ShortTermCalendar() {
   const HOUR_HEIGHT = (view === 'day' || view === 'week') ? ZOOM_LEVELS[zoomLevel].hourHeight : 60;
   const SLOT_HEIGHT = HOUR_HEIGHT / 60; // px per minute
 
+  // Ctrl+Scroll wheel zoom — standard zoom UX
+  useEffect(() => {
+    const container = calendarRef.current;
+    if (!container || view === 'month') return;
+
+    const handleWheel = (e) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+
+      // Get scroll position ratio before zoom to maintain position
+      const scrollRatio = container.scrollTop / (container.scrollHeight - container.clientHeight || 1);
+      const maxLevel = view === 'week' ? 5 : ZOOM_LEVELS.length - 1;
+
+      setZoomLevel((prev) => {
+        const next = e.deltaY < 0
+          ? Math.min(maxLevel, prev + 1)    // scroll up = zoom in
+          : Math.max(0, prev - 1);           // scroll down = zoom out
+        // When entering hour-focus, set focus to current hour
+        if (ZOOM_LEVELS[next].hourFocus && !ZOOM_LEVELS[prev].hourFocus) {
+          // Calculate which hour is at the center of the viewport
+          const centerY = container.scrollTop + container.clientHeight / 2;
+          const centerHour = Math.floor(centerY / ZOOM_LEVELS[prev].hourHeight);
+          setFocusHour(Math.max(0, Math.min(23, centerHour)));
+        }
+        return next;
+      });
+
+      // Restore scroll position after React re-render
+      requestAnimationFrame(() => {
+        const newMaxScroll = container.scrollHeight - container.clientHeight;
+        container.scrollTop = scrollRatio * newMaxScroll;
+      });
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => container.removeEventListener('wheel', handleWheel);
+  }, [view, zoomLevel]);
+
   // Routine progress banner visibility (collapsed by default to prioritize calendar)
   const [routineBannerOpen, setRoutineBannerOpen] = useState(false);
 
@@ -272,10 +310,14 @@ export default function ShortTermCalendar() {
   };
 
   // Calculate task position and height based on time (1-minute precision)
+  // Hour-focus window sizing: deeper zoom = narrower window
+  const focusWindowHours = HOUR_HEIGHT >= 1800 ? 1 : HOUR_HEIGHT >= 1200 ? 2 : 3;
+  const focusPaddingHours = Math.floor((focusWindowHours - 1) / 2);
+
   // Like One Calendar / TickTick: event height is STRICTLY proportional to duration.
   // A 6-minute event = 1/10th of an hour. A 30-minute event = half an hour.
-  // GAP_PX: visible grid strip between every event (top inset + bottom shrink).
-  const GAP_PX = 2; // pixels of grid visible between back-to-back events
+  // GAP_PX scales with zoom so events are visually separated at every level.
+  const GAP_PX = HOUR_HEIGHT >= 480 ? 3 : HOUR_HEIGHT >= 120 ? 2 : 1;
 
   const getTaskStyle = (task) => {
     if (!task.startTime || !task.endTime) return {};
@@ -413,6 +455,17 @@ export default function ShortTermCalendar() {
     setShowEventModal(true);
   };
 
+  // Double-click on event to zoom into its time range
+  const handleTaskDoubleClick = (task, e) => {
+    e.stopPropagation();
+    if (!task.startTime || view !== 'day') return;
+    const [sH] = task.startTime.split(':').map(Number);
+    // Jump to a deep zoom level focused on this event's hour
+    const targetLevel = Math.max(zoomLevel, 6); // At least 12x
+    setZoomLevel(Math.min(targetLevel, ZOOM_LEVELS.length - 1));
+    setFocusHour(sH);
+  };
+
   // Save confirmation state
   const [saveConfirmation, setSaveConfirmation] = useState(null);
 
@@ -476,11 +529,6 @@ export default function ShortTermCalendar() {
   // Render time grid with tasks
   const renderTimeGrid = (dates, showTimeColumn = true) => {
     const isMultiDay = dates.length > 1;
-
-    // In hour-focus mode, how many hours to show depends on zoom depth
-    // At 12x: show 3 hours (focus ± 1). At 20x: show 2 hours. At 30x: show 1 hour.
-    const focusWindowHours = HOUR_HEIGHT >= 1800 ? 1 : HOUR_HEIGHT >= 1200 ? 2 : 3;
-    const focusPaddingHours = Math.floor((focusWindowHours - 1) / 2); // hours before/after focus
 
     const hourFocusStyle = isHourFocus ? {
       height: `${focusWindowHours * HOUR_HEIGHT}px`,
@@ -652,7 +700,8 @@ export default function ShortTermCalendar() {
                         className={`calendar-task ${!customColor ? `priority-${task.priority}` : ''} type-${task.type} ${task.completed ? 'completed' : ''} ${isZoomedIn ? 'zoomed' : ''} ${isDeepZoom ? 'deep-zoom' : ''} ${isUltraZoom ? 'ultra-zoom' : ''} ${customColor ? 'custom-color' : ''} ${durationCls} ${compactMode ? 'compact' : ''}`}
                         style={colorStyle}
                         onClick={(e) => handleTaskClick(task, e)}
-                        title={`${task.title}\n${task.startTime} - ${task.endTime}${task.description ? '\n' + task.description : ''}`}
+                        onDoubleClick={(e) => handleTaskDoubleClick(task, e)}
+                        title={`${task.title}\n${task.startTime} - ${task.endTime}${task.description ? '\n' + task.description : ''}${view === 'day' ? '\nDouble-click to zoom in' : ''}`}
                       >
                         {compactMode ? (
                           /* Compact: single line with time and truncated title */
@@ -1198,7 +1247,7 @@ export default function ShortTermCalendar() {
               >
                 <ZoomOut size={14} />
               </button>
-              <span className="zoom-label">{ZOOM_LEVELS[zoomLevel].label}</span>
+              <span className="zoom-label" title="Ctrl+Scroll to zoom">{ZOOM_LEVELS[zoomLevel].label}</span>
               <button
                 className="zoom-btn"
                 onClick={() => {
