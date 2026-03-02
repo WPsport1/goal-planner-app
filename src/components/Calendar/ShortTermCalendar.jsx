@@ -329,6 +329,278 @@ export default function ShortTermCalendar() {
   });
   const [showCustomRecurrence, setShowCustomRecurrence] = useState(false);
 
+  // =========================================================
+  // Drag-to-Create & Drag-to-Resize infrastructure
+  // =========================================================
+  const DRAG_THRESHOLD = 5; // pixels before mousedown becomes a drag
+
+  // Snap minutes to nearest 5-minute increment
+  const snapTo5 = (minutes) => Math.round(minutes / 5) * 5;
+
+  // Format minutes (0-1439) as "HH:MM"
+  const minutesToTimeStr = (m) => {
+    const clamped = Math.max(0, Math.min(1439, m));
+    const h = Math.floor(clamped / 60);
+    const min = clamped % 60;
+    return `${h.toString().padStart(2, '0')}:${min.toString().padStart(2, '0')}`;
+  };
+
+  // Convert mouse clientY to total minutes (0-1439), accounting for scroll + hour-focus offset
+  const yToMinutes = (clientY, daySlotEl) => {
+    const rect = daySlotEl.getBoundingClientRect();
+    // Replicate existing handleSlotClick formula exactly
+    const y = clientY - rect.top + (calendarRef.current?.scrollTop || 0);
+    const focusOff = isHourFocus
+      ? Math.max(0, focusHour - focusPaddingHours) * 60 * SLOT_HEIGHT
+      : 0;
+    const rawMinutes = (y + focusOff) / SLOT_HEIGHT;
+    return Math.max(0, Math.min(1439, rawMinutes));
+  };
+
+  // Open the create-event modal with pre-filled times
+  const openCreateModal = (date, startTime, endTime) => {
+    setEditingTask(null);
+    setEventForm({
+      title: '',
+      description: '',
+      type: 'task',
+      priority: 'medium',
+      color: 'default',
+      scheduledDate: format(date, 'yyyy-MM-dd'),
+      startTime,
+      endTime,
+      recurrence: 'none',
+      customRecurrence: {
+        frequency: 'weekly',
+        interval: 1,
+        daysOfWeek: [],
+        endType: 'never',
+        endDate: '',
+        endCount: 10,
+      },
+      reminder: false,
+      reminderMinutes: 15,
+    });
+    setShowEventModal(true);
+  };
+
+  // Drag state — ref avoids re-renders during drag, only dragState triggers renders
+  const [dragState, setDragState] = useState({ active: false, type: null });
+  const dragRef = useRef({
+    active: false,
+    type: null,       // 'create' | 'resize'
+    startY: 0,
+    startMinutes: 0,
+    currentMinutes: 0,
+    date: null,
+    daySlotEl: null,
+    ghostEl: null,
+    tooltipEl: null,
+    // Resize-specific
+    taskId: null,
+    taskStartMinutes: 0,
+    originalEndMinutes: 0,
+    taskEl: null,
+  });
+
+  // Stable ref wrapper so document listeners always call latest closure
+  const handleDragMoveRef = useRef(null);
+  const handleDragEndRef = useRef(null);
+  const stableDragMove = useRef((e) => handleDragMoveRef.current?.(e)).current;
+  const stableDragEnd = useRef((e) => handleDragEndRef.current?.(e)).current;
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      document.removeEventListener('mousemove', stableDragMove);
+      document.removeEventListener('mouseup', stableDragEnd);
+      document.body.style.cursor = '';
+      document.body.style.userSelect = '';
+    };
+  }, []);
+
+  // --- Ghost & Tooltip DOM manipulation (no React re-renders) ---
+  const createGhostElement = (drag) => {
+    const ghost = document.createElement('div');
+    ghost.className = 'drag-ghost-preview';
+    drag.daySlotEl.appendChild(ghost);
+    drag.ghostEl = ghost;
+  };
+
+  const updateGhostElement = (drag) => {
+    if (!drag.ghostEl) return;
+    const startMin = Math.min(drag.startMinutes, drag.currentMinutes);
+    const endMin = Math.max(drag.startMinutes, drag.currentMinutes);
+    const focusOff = isHourFocus
+      ? Math.max(0, focusHour - focusPaddingHours) * 60 * SLOT_HEIGHT
+      : 0;
+    const top = startMin * SLOT_HEIGHT - focusOff + GAP_PX;
+    const height = Math.max(5 * SLOT_HEIGHT, (endMin - startMin) * SLOT_HEIGHT - GAP_PX * 2);
+    drag.ghostEl.style.top = `${top}px`;
+    drag.ghostEl.style.height = `${height}px`;
+  };
+
+  const createTooltipElement = (drag) => {
+    const tooltip = document.createElement('div');
+    tooltip.className = 'drag-time-tooltip';
+    drag.daySlotEl.appendChild(tooltip);
+    drag.tooltipEl = tooltip;
+  };
+
+  const updateTooltipElement = (drag) => {
+    if (!drag.tooltipEl) return;
+    let startMin, endMin;
+    if (drag.type === 'create') {
+      startMin = Math.min(drag.startMinutes, drag.currentMinutes);
+      endMin = Math.max(drag.startMinutes, drag.currentMinutes);
+    } else {
+      startMin = drag.taskStartMinutes;
+      endMin = drag.currentMinutes;
+    }
+    const duration = endMin - startMin;
+    drag.tooltipEl.textContent = `${minutesToTimeStr(startMin)} – ${minutesToTimeStr(endMin)} (${duration}min)`;
+    const focusOff = isHourFocus
+      ? Math.max(0, focusHour - focusPaddingHours) * 60 * SLOT_HEIGHT
+      : 0;
+    drag.tooltipEl.style.top = `${endMin * SLOT_HEIGHT - focusOff + 4}px`;
+  };
+
+  const updateResizeVisual = (drag) => {
+    if (!drag.taskEl) return;
+    const duration = drag.currentMinutes - drag.taskStartMinutes;
+    const heightPx = Math.max(2, duration * SLOT_HEIGHT - GAP_PX * 2);
+    drag.taskEl.style.height = `${heightPx}px`;
+    drag.taskEl.style.minHeight = `${heightPx}px`;
+    drag.taskEl.style.transition = 'none';
+  };
+
+  // --- Core drag handlers ---
+  const handleDragMove = (e) => {
+    const drag = dragRef.current;
+    if (drag.type === 'create') {
+      if (!drag.active) {
+        if (Math.abs(e.clientY - drag.startY) < DRAG_THRESHOLD) return;
+        drag.active = true;
+        setDragState({ active: true, type: 'create' });
+        document.body.style.cursor = 'ns-resize';
+        document.body.style.userSelect = 'none';
+        createGhostElement(drag);
+        createTooltipElement(drag);
+      }
+      drag.currentMinutes = snapTo5(yToMinutes(e.clientY, drag.daySlotEl));
+      updateGhostElement(drag);
+      updateTooltipElement(drag);
+    } else if (drag.type === 'resize') {
+      if (!drag.active) {
+        if (Math.abs(e.clientY - drag.startY) < DRAG_THRESHOLD) return;
+        drag.active = true;
+        setDragState({ active: true, type: 'resize' });
+        document.body.style.cursor = 'ns-resize';
+        document.body.style.userSelect = 'none';
+        createTooltipElement(drag);
+      }
+      const minutes = snapTo5(yToMinutes(e.clientY, drag.daySlotEl));
+      drag.currentMinutes = Math.max(drag.taskStartMinutes + 5, minutes);
+      updateResizeVisual(drag);
+      updateTooltipElement(drag);
+    }
+  };
+
+  const handleDragEnd = (e) => {
+    document.removeEventListener('mousemove', stableDragMove);
+    document.removeEventListener('mouseup', stableDragEnd);
+    const drag = dragRef.current;
+    document.body.style.cursor = '';
+    document.body.style.userSelect = '';
+
+    // Cleanup DOM elements
+    if (drag.ghostEl) { drag.ghostEl.remove(); drag.ghostEl = null; }
+    if (drag.tooltipEl) { drag.tooltipEl.remove(); drag.tooltipEl = null; }
+
+    if (drag.type === 'create') {
+      if (!drag.active) {
+        // Below threshold — treat as click → open modal with 1-hour default
+        const minutes = snapTo5(yToMinutes(e.clientY, drag.daySlotEl));
+        const endMinutes = Math.min(1439, minutes + 60);
+        openCreateModal(drag.date, minutesToTimeStr(minutes), minutesToTimeStr(endMinutes));
+      } else {
+        // Drag completed — open modal with dragged range
+        const startMin = Math.min(drag.startMinutes, drag.currentMinutes);
+        const endMin = Math.max(drag.startMinutes, drag.currentMinutes);
+        if (endMin - startMin >= 5) {
+          openCreateModal(drag.date, minutesToTimeStr(startMin), minutesToTimeStr(endMin));
+        }
+      }
+    } else if (drag.type === 'resize') {
+      if (drag.active) {
+        const newEndTime = minutesToTimeStr(drag.currentMinutes);
+        updateTask(drag.taskId, { endTime: newEndTime });
+        if (drag.taskEl) {
+          drag.taskEl.style.height = '';
+          drag.taskEl.style.minHeight = '';
+          drag.taskEl.style.transition = '';
+        }
+      }
+    }
+
+    setDragState({ active: false, type: null });
+    drag.active = false;
+    drag.type = null;
+  };
+
+  // Keep stable refs updated every render
+  handleDragMoveRef.current = handleDragMove;
+  handleDragEndRef.current = handleDragEnd;
+
+  // Mousedown on empty slot → potential drag-to-create
+  const handleDaySlotsMouseDown = (date, e) => {
+    if (e.button !== 0) return;
+    if (e.target.closest('.calendar-task')) return;
+    const daySlotEl = e.currentTarget;
+    const minutes = snapTo5(yToMinutes(e.clientY, daySlotEl));
+    dragRef.current = {
+      ...dragRef.current,
+      active: false,
+      type: 'create',
+      startY: e.clientY,
+      startMinutes: minutes,
+      currentMinutes: minutes,
+      date,
+      daySlotEl,
+      ghostEl: null,
+      tooltipEl: null,
+    };
+    document.addEventListener('mousemove', stableDragMove);
+    document.addEventListener('mouseup', stableDragEnd);
+  };
+
+  // Mousedown on resize handle → drag-to-resize
+  const handleResizeMouseDown = (task, e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (e.button !== 0) return;
+    const taskEl = e.currentTarget.closest('.calendar-task');
+    const daySlotEl = taskEl.closest('.day-slots');
+    const [sH, sM] = task.startTime.split(':').map(Number);
+    const [eH, eM] = task.endTime.split(':').map(Number);
+    dragRef.current = {
+      ...dragRef.current,
+      active: false,
+      type: 'resize',
+      startY: e.clientY,
+      taskId: task.id,
+      taskStartMinutes: sH * 60 + sM,
+      currentMinutes: eH * 60 + eM,
+      originalEndMinutes: eH * 60 + eM,
+      daySlotEl,
+      taskEl,
+      ghostEl: null,
+      tooltipEl: null,
+    };
+    document.addEventListener('mousemove', stableDragMove);
+    document.addEventListener('mouseup', stableDragEnd);
+  };
+
   // Update current time every minute
   useEffect(() => {
     const timer = setInterval(() => {
@@ -468,43 +740,6 @@ export default function ShortTermCalendar() {
     return eachDayOfInterval({ start, end });
   }, [currentDate]);
 
-  // Handle click on empty calendar slot to create new event
-  const handleSlotClick = (date, e) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const clickY = e.clientY - rect.top + (calendarRef.current?.scrollTop || 0);
-    const totalMinutes = Math.floor(clickY / SLOT_HEIGHT);
-    const hour = Math.floor(totalMinutes / 60);
-    const minute = Math.round((totalMinutes % 60) / 5) * 5; // Round to nearest 5 min
-
-    const startTime = `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-    const endHour = hour + 1;
-    const endTime = `${endHour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
-
-    setEditingTask(null);
-    setEventForm({
-      title: '',
-      description: '',
-      type: 'task',
-      priority: 'medium',
-      color: 'default',
-      scheduledDate: format(date, 'yyyy-MM-dd'),
-      startTime,
-      endTime,
-      recurrence: 'none',
-      customRecurrence: {
-        frequency: 'weekly',
-        interval: 1,
-        daysOfWeek: [],
-        endType: 'never',
-        endDate: '',
-        endCount: 10,
-      },
-      reminder: false,
-      reminderMinutes: 15,
-    });
-    setShowEventModal(true);
-  };
-
   // Handle click on existing task to edit
   const handleTaskClick = (task, e) => {
     e.stopPropagation();
@@ -619,7 +854,7 @@ export default function ShortTermCalendar() {
       : Array.from({ length: 24 }, (_, i) => i);
 
     return (
-      <div className={`time-grid-container ${isHourFocus ? 'hour-focus-mode' : ''}`} ref={calendarRef} style={isHourFocus ? { overflow: 'hidden' } : {}}>
+      <div className={`time-grid-container ${isHourFocus ? 'hour-focus-mode' : ''} ${dragState.active ? 'is-dragging' : ''}`} ref={calendarRef} style={isHourFocus ? { overflow: 'hidden' } : {}}>
         <div className={`time-grid ${isMultiDay ? 'multi-day' : 'single-day'}`} style={isHourFocus ? { minHeight: `${HOUR_HEIGHT * focusWindowHours}px`, position: 'relative' } : { minHeight: `${24 * HOUR_HEIGHT}px` }}>
           {/* Time labels column */}
           {showTimeColumn && (
@@ -670,7 +905,7 @@ export default function ShortTermCalendar() {
                 {/* Time slots - clickable area */}
                 <div
                   className="day-slots"
-                  onClick={(e) => handleSlotClick(date, e)}
+                  onMouseDown={(e) => handleDaySlotsMouseDown(date, e)}
                   style={isHourFocus ? { position: 'relative' } : {}}
                 >
                   {/* Hour lines */}
@@ -838,6 +1073,11 @@ export default function ShortTermCalendar() {
                             )}
                           </>
                         )}
+                        {/* Resize handle at bottom edge */}
+                        <div
+                          className="resize-handle"
+                          onMouseDown={(e) => handleResizeMouseDown(task, e)}
+                        />
                       </div>
                     );
                   });
