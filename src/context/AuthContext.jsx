@@ -20,6 +20,12 @@ export function AuthProvider({ children }) {
       return;
     }
 
+    // Safety timeout: never block the app for more than 3 seconds waiting for auth
+    const authTimeout = setTimeout(() => {
+      console.warn('[Auth] Supabase auth check timed out after 3s — proceeding without auth');
+      setLoading(false);
+    }, 3000);
+
     // Get initial session
     const getInitialSession = async () => {
       try {
@@ -30,6 +36,7 @@ export function AuthProvider({ children }) {
         console.error('Error getting session:', err);
         setError(err.message);
       } finally {
+        clearTimeout(authTimeout);
         setLoading(false);
       }
     };
@@ -49,6 +56,7 @@ export function AuthProvider({ children }) {
     );
 
     return () => {
+      clearTimeout(authTimeout);
       subscription?.unsubscribe();
     };
   }, []);
