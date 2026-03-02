@@ -127,6 +127,84 @@ const getEventColor = (task) => {
   return null; // Use priority-based colors
 };
 
+// =========================================================
+// Overlap Layout Algorithm (Google Calendar / TickTick style)
+// Detects overlapping events and assigns column positions
+// so they render side-by-side instead of stacking.
+// =========================================================
+const computeOverlapLayout = (tasks) => {
+  // Parse time fields into minutes for comparison
+  const timed = tasks
+    .filter(t => t.startTime && t.endTime)
+    .map(t => {
+      const [sH, sM] = t.startTime.split(':').map(Number);
+      const [eH, eM] = t.endTime.split(':').map(Number);
+      return { id: t.id, start: sH * 60 + sM, end: eH * 60 + eM };
+    })
+    .sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
+
+  if (timed.length === 0) return new Map();
+
+  const layout = new Map(); // taskId -> { column, totalColumns }
+
+  // Step 1: Group into clusters — a cluster is a maximal set of events
+  // where each event overlaps with at least one other in the cluster.
+  // A cluster ends when the next event starts at or after all current events end.
+  let clusters = [];
+  let currentCluster = [timed[0]];
+  let clusterEnd = timed[0].end;
+
+  for (let i = 1; i < timed.length; i++) {
+    if (timed[i].start < clusterEnd) {
+      // Overlaps with cluster — add to it
+      currentCluster.push(timed[i]);
+      clusterEnd = Math.max(clusterEnd, timed[i].end);
+    } else {
+      // No overlap — close current cluster, start new one
+      clusters.push(currentCluster);
+      currentCluster = [timed[i]];
+      clusterEnd = timed[i].end;
+    }
+  }
+  clusters.push(currentCluster);
+
+  // Step 2: Within each cluster, assign columns greedily.
+  // For each event, pick the first column where it doesn't overlap
+  // with any existing event in that column.
+  for (const cluster of clusters) {
+    const columns = []; // columns[i] = array of events assigned to column i
+
+    for (const event of cluster) {
+      let placed = false;
+      for (let col = 0; col < columns.length; col++) {
+        // Check if this event overlaps with the last event in this column
+        const lastInCol = columns[col][columns[col].length - 1];
+        if (event.start >= lastInCol.end) {
+          // No overlap — place here
+          columns[col].push(event);
+          layout.set(event.id, { column: col, totalColumns: 0 });
+          placed = true;
+          break;
+        }
+      }
+      if (!placed) {
+        // New column needed
+        columns.push([event]);
+        layout.set(event.id, { column: columns.length - 1, totalColumns: 0 });
+      }
+    }
+
+    // Set totalColumns for every event in this cluster
+    const totalCols = columns.length;
+    for (const event of cluster) {
+      const info = layout.get(event.id);
+      info.totalColumns = totalCols;
+    }
+  }
+
+  return layout;
+};
+
 export default function ShortTermCalendar() {
   const { tasks, addTask, updateTask, deleteTask, openDetail, toggleTaskComplete, lastSaveStatus } = useApp();
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -661,14 +739,27 @@ export default function ShortTermCalendar() {
                     </div>
                   )}
 
-                  {/* Tasks */}
-                  {visibleTasks.map((task) => {
+                  {/* Tasks — with overlap column layout */}
+                  {(() => {
+                    const overlapLayout = computeOverlapLayout(visibleTasks);
+                    return visibleTasks.map((task) => {
                     const rawStyle = getTaskStyle(task);
                     // In hour-focus mode, offset top position
                     const taskStyle = isHourFocus ? {
                       ...rawStyle,
                       top: `${parseFloat(rawStyle.top) - focusOffset}px`,
                     } : rawStyle;
+
+                    // Apply overlap column positioning
+                    const colInfo = overlapLayout.get(task.id);
+                    const COL_GAP = 2; // px gap between side-by-side columns
+                    if (colInfo && colInfo.totalColumns > 1) {
+                      const pct = 100 / colInfo.totalColumns;
+                      taskStyle.left = `calc(${colInfo.column * pct}% + ${COL_GAP}px)`;
+                      taskStyle.width = `calc(${pct}% - ${COL_GAP * 2}px)`;
+                      taskStyle.right = 'auto';
+                    }
+
                     const isZoomedIn = HOUR_HEIGHT >= 120;
                     const isDeepZoom = HOUR_HEIGHT >= 480;
                     const isUltraZoom = HOUR_HEIGHT >= 1200;
@@ -749,7 +840,8 @@ export default function ShortTermCalendar() {
                         )}
                       </div>
                     );
-                  })}
+                  });
+                  })()}
                 </div>
               </div>
             );
