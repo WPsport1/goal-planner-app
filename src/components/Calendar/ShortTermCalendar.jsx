@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
+import { doesTaskOccurOnDate, createVirtualInstance } from '../../utils/recurrence';
 import {
   format,
   startOfDay,
@@ -261,12 +262,24 @@ export default function ShortTermCalendar() {
   // Routine progress banner visibility (collapsed by default to prioritize calendar)
   const [routineBannerOpen, setRoutineBannerOpen] = useState(false);
 
-  // Routine progress tracking for today
+  // Routine progress tracking for today (including recurring routines)
   const todayRoutineTasks = useMemo(() => {
-    const todayStr = format(new Date(), 'yyyy-MM-dd');
-    return tasks.filter(
-      (t) => t.type === 'routine' && t.scheduledDate && t.scheduledDate.startsWith(todayStr)
-    );
+    const today = new Date();
+    const todayStr = format(today, 'yyyy-MM-dd');
+    const results = [];
+    for (const t of tasks) {
+      if (t.type !== 'routine' || !t.scheduledDate) continue;
+      if (t.recurrence && t.recurrence !== 'none') {
+        if (doesTaskOccurOnDate(t, today)) {
+          results.push(createVirtualInstance(t, today));
+        }
+      } else {
+        if (t.scheduledDate.startsWith(todayStr)) {
+          results.push(t);
+        }
+      }
+    }
+    return results;
   }, [tasks]);
 
   const routineProgress = useMemo(() => {
@@ -588,7 +601,7 @@ export default function ShortTermCalendar() {
       active: false,
       type: 'resize',
       startY: e.clientY,
-      taskId: task.id,
+      taskId: task._isVirtual ? task._parentId : task.id,
       taskStartMinutes: sH * 60 + sM,
       currentMinutes: eH * 60 + eM,
       originalEndMinutes: eH * 60 + eM,
@@ -650,13 +663,24 @@ export default function ShortTermCalendar() {
     setCurrentDate(new Date());
   };
 
-  // Get tasks for a specific date
+  // Get tasks for a specific date (with recurring task expansion)
   const getTasksForDate = (date) => {
-    return tasks.filter((task) => {
-      if (!task.scheduledDate) return false;
-      const taskDate = parseISO(task.scheduledDate);
-      return isSameDay(taskDate, date);
-    });
+    const results = [];
+    for (const task of tasks) {
+      if (!task.scheduledDate) continue;
+      if (task.recurrence && task.recurrence !== 'none') {
+        // Recurring: check if this date matches the pattern
+        if (doesTaskOccurOnDate(task, date)) {
+          results.push(createVirtualInstance(task, date));
+        }
+      } else {
+        // Non-recurring: exact date match
+        if (isSameDay(parseISO(task.scheduledDate), date)) {
+          results.push(task);
+        }
+      }
+    }
+    return results;
   };
 
   // Calculate task position and height based on time (1-minute precision)
@@ -743,18 +767,22 @@ export default function ShortTermCalendar() {
   // Handle click on existing task to edit
   const handleTaskClick = (task, e) => {
     e.stopPropagation();
-    setEditingTask(task);
+    // For virtual recurring instances, resolve to the parent task
+    const actualTask = task._isVirtual
+      ? tasks.find(t => t.id === task._parentId) || task
+      : task;
+    setEditingTask(actualTask);
     setEventForm({
-      title: task.title || '',
-      description: task.description || '',
-      type: task.type || 'task',
-      priority: task.priority || 'medium',
-      color: task.color || 'default',
-      scheduledDate: task.scheduledDate ? format(parseISO(task.scheduledDate), 'yyyy-MM-dd') : '',
-      startTime: task.startTime || '09:00',
-      endTime: task.endTime || '10:00',
-      recurrence: task.recurrence || 'none',
-      customRecurrence: task.customRecurrence || {
+      title: actualTask.title || '',
+      description: actualTask.description || '',
+      type: actualTask.type || 'task',
+      priority: actualTask.priority || 'medium',
+      color: actualTask.color || 'default',
+      scheduledDate: actualTask.scheduledDate ? format(parseISO(actualTask.scheduledDate), 'yyyy-MM-dd') : '',
+      startTime: actualTask.startTime || '09:00',
+      endTime: actualTask.endTime || '10:00',
+      recurrence: actualTask.recurrence || 'none',
+      customRecurrence: actualTask.customRecurrence || {
         frequency: 'weekly',
         interval: 1,
         daysOfWeek: [],
@@ -762,8 +790,8 @@ export default function ShortTermCalendar() {
         endDate: '',
         endCount: 10,
       },
-      reminder: task.reminder || false,
-      reminderMinutes: task.reminderMinutes || 15,
+      reminder: actualTask.reminder || false,
+      reminderMinutes: actualTask.reminderMinutes || 15,
     });
     setShowEventModal(true);
   };

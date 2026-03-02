@@ -11,7 +11,8 @@ import {
   routineService,
   isSupabaseConfigured
 } from '../services/supabase';
-import { isToday, parseISO, startOfDay, subDays, isSameDay } from 'date-fns';
+import { isToday, parseISO, startOfDay, subDays, isSameDay, format } from 'date-fns';
+import { parseVirtualId } from '../utils/recurrence';
 
 // ============================================
 // BULLETPROOF localStorage helpers
@@ -376,6 +377,7 @@ export function AppProvider({ children }) {
     end_time: task.endTime,
     recurrence: task.recurrence,
     completed: task.completed,
+    completed_dates: task.completedDates || [],
     linked_goal_id: task.linkedGoalId,
     data_points: task.dataPoints,
   });
@@ -392,6 +394,7 @@ export function AppProvider({ children }) {
     endTime: dbTask.end_time,
     recurrence: dbTask.recurrence,
     completed: dbTask.completed,
+    completedDates: dbTask.completed_dates || [],
     linkedGoalId: dbTask.linked_goal_id,
     createdAt: dbTask.created_at,
     dataPoints: dbTask.data_points || [],
@@ -508,12 +511,27 @@ export function AppProvider({ children }) {
     createdAt: dbRoutine.created_at,
   });
 
-  // Calculate habit streak
+  // Calculate habit streak (supports both recurring completedDates and legacy completed flag)
   const calculateHabitStreak = useCallback((habitTitle) => {
-    const habitCompletions = tasks
-      .filter((t) => t.title === habitTitle && t.type === 'habit' && t.completed)
-      .map((t) => startOfDay(parseISO(t.scheduledDate || t.createdAt)))
-      .sort((a, b) => b - a);
+    const allDates = [];
+
+    for (const t of tasks) {
+      if (t.title !== habitTitle || t.type !== 'habit') continue;
+
+      if (t.recurrence && t.recurrence !== 'none' && Array.isArray(t.completedDates)) {
+        // Recurring habit: each entry in completedDates is a completed date
+        for (const dateStr of t.completedDates) {
+          allDates.push(startOfDay(new Date(dateStr + 'T00:00:00')));
+        }
+      } else if (t.completed) {
+        // Non-recurring: legacy behavior
+        allDates.push(startOfDay(parseISO(t.scheduledDate || t.createdAt)));
+      }
+    }
+
+    // Deduplicate by date
+    const uniqueTimes = [...new Set(allDates.map(d => d.getTime()))];
+    const habitCompletions = uniqueTimes.map(t => new Date(t)).sort((a, b) => b - a);
 
     if (habitCompletions.length === 0) return 0;
 
@@ -675,6 +693,7 @@ export function AppProvider({ children }) {
       createdAt: new Date().toISOString(),
       dataPoints: [],
       completed: false,
+      completedDates: [],
       ...task,
     };
 
@@ -749,12 +768,71 @@ export function AppProvider({ children }) {
   };
 
   const toggleTaskComplete = async (id) => {
-    const task = tasks.find((t) => t.id === id);
+    // Detect virtual recurring instance IDs (format: parentId_YYYY-MM-DD)
+    const parsed = parseVirtualId(id);
+    const realId = parsed ? parsed.parentId : id;
+    const instanceDate = parsed ? parsed.dateStr : null;
+
+    const task = tasks.find((t) => t.id === realId);
     if (!task) return;
 
+    // RECURRING TASK: toggle date in completedDates
+    if (instanceDate && task.recurrence && task.recurrence !== 'none') {
+      const completedDates = Array.isArray(task.completedDates)
+        ? [...task.completedDates]
+        : [];
+      const idx = completedDates.indexOf(instanceDate);
+      const wasCompleted = idx !== -1;
+
+      if (wasCompleted) {
+        completedDates.splice(idx, 1);
+      } else {
+        completedDates.push(instanceDate);
+      }
+
+      setTasks((prev) => {
+        const updated = prev.map((t) =>
+          t.id === realId ? { ...t, completedDates } : t
+        );
+        saveTasksToLocalStorage(updated);
+        return updated;
+      });
+
+      if (!wasCompleted) {
+        if (task.type === 'habit') {
+          setTimeout(() => {
+            const streak = calculateHabitStreak(task.title);
+            if (streak > 0 && (streak === 7 || streak === 14 || streak === 30 || streak === 100 || streak % 50 === 0)) {
+              triggerCelebration('streak', { streak, message: `Amazing! ${streak} day streak on "${task.title}"!` });
+            } else if (streak === 1) {
+              triggerCelebration('habit_complete', { message: 'Great start! Day 1 complete!' });
+            } else {
+              triggerCelebration('habit_complete', { streak, message: `${streak} day streak! Keep going!` });
+            }
+          }, 100);
+        } else {
+          triggerCelebration('task_complete', { message: task.title });
+        }
+      }
+
+      if (isConfigured && user) {
+        try {
+          setIsSyncing(true);
+          const result = await taskService.update(realId, { completed_dates: completedDates });
+          if (result.error) throw new Error(result.error);
+        } catch (err) {
+          console.error('Error syncing recurring task toggle:', err);
+          setSyncError(err.message);
+        } finally {
+          setIsSyncing(false);
+        }
+      }
+      return;
+    }
+
+    // NON-RECURRING TASK: original behavior
     const newCompleted = !task.completed;
 
-    // Optimistic update + immediate localStorage save
     setTasks((prev) => {
       const updated = prev.map((t) =>
         t.id === id ? { ...t, completed: newCompleted } : t
@@ -763,10 +841,8 @@ export function AppProvider({ children }) {
       return updated;
     });
 
-    // Trigger celebrations
     if (newCompleted) {
       if (task.type === 'habit') {
-        // Calculate streak after completion
         setTimeout(() => {
           const streak = calculateHabitStreak(task.title);
           if (streak > 0 && (streak === 7 || streak === 14 || streak === 30 || streak === 100 || streak % 50 === 0)) {
@@ -778,12 +854,10 @@ export function AppProvider({ children }) {
           }
         }, 100);
       } else {
-        // Regular task completion - show subtle celebration
         triggerCelebration('task_complete', { message: task.title });
       }
     }
 
-    // Sync to cloud
     if (isConfigured && user) {
       try {
         setIsSyncing(true);
