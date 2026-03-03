@@ -30,8 +30,12 @@ export function doesTaskOccurOnDate(task, targetDate) {
       return dow >= 1 && dow <= 5;
     }
 
-    case 'weekly':
+    case 'weekly': {
+      if (task.weeklyDays && task.weeklyDays.length > 0) {
+        return task.weeklyDays.includes(getDay(target));
+      }
       return getDay(target) === getDay(origin);
+    }
 
     case 'biweekly': {
       if (getDay(target) !== getDay(origin)) return false;
@@ -197,13 +201,65 @@ export function createVirtualInstance(task, targetDate) {
 }
 
 // Parse a virtual instance ID back into parentId + dateStr
+// Supports standard IDs ({parentId}_{YYYY-MM-DD}) and
+// segment IDs ({parentId}_start_{YYYY-MM-DD}, {parentId}_cont_{YYYY-MM-DD})
 export function parseVirtualId(id) {
   if (typeof id !== 'string') return null;
+  // Segment IDs: {parentId}_start_{YYYY-MM-DD} or {parentId}_cont_{YYYY-MM-DD}
+  const segMatch = id.match(/^(.+)_(start|cont)_(\d{4}-\d{2}-\d{2})$/);
+  if (segMatch) {
+    return { parentId: segMatch[1], dateStr: segMatch[3], segment: segMatch[2] };
+  }
+  // Standard virtual ID: {parentId}_{YYYY-MM-DD}
   const sep = id.lastIndexOf('_');
   if (sep === -1) return null;
   const dateStr = id.substring(sep + 1);
-  // Validate 'YYYY-MM-DD' format
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return null;
-  const parentId = id.substring(0, sep);
-  return { parentId, dateStr };
+  return { parentId: id.substring(0, sep), dateStr };
+}
+
+// Check if a task spans across midnight (endTime < startTime)
+export function isCrossMidnight(task) {
+  if (!task.startTime || !task.endTime) return false;
+  const [sH, sM] = task.startTime.split(':').map(Number);
+  const [eH, eM] = task.endTime.split(':').map(Number);
+  return (eH * 60 + eM) < (sH * 60 + sM);
+}
+
+// Create start-segment instance for cross-midnight events (startTime → 23:59)
+export function createStartSegmentInstance(task, targetDate) {
+  const dateStr = format(targetDate, 'yyyy-MM-dd');
+  const isCompleted = (task.recurrence && task.recurrence !== 'none')
+    ? (Array.isArray(task.completedDates) && task.completedDates.includes(dateStr))
+    : task.completed;
+  return {
+    ...task,
+    id: `${task.id}_start_${dateStr}`,
+    _parentId: task.id,
+    _instanceDate: dateStr,
+    _isVirtual: true,
+    _segment: 'start',
+    endTime: '23:59',
+    completed: isCompleted,
+  };
+}
+
+// Create continuation instance for cross-midnight events (00:00 → endTime)
+// Appears on the NEXT day after the start; _instanceDate tracks the start date
+export function createContinuationInstance(task, targetDate) {
+  const prevDate = addDays(targetDate, -1);
+  const startDateStr = format(prevDate, 'yyyy-MM-dd');
+  const isCompleted = (task.recurrence && task.recurrence !== 'none')
+    ? (Array.isArray(task.completedDates) && task.completedDates.includes(startDateStr))
+    : task.completed;
+  return {
+    ...task,
+    id: `${task.id}_cont_${startDateStr}`,
+    _parentId: task.id,
+    _instanceDate: startDateStr,
+    _isVirtual: true,
+    _segment: 'continuation',
+    startTime: '00:00',
+    completed: isCompleted,
+  };
 }

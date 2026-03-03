@@ -1231,6 +1231,26 @@
   color: #fff;
 }
 
+/* "(next day)" label for cross-midnight events */
+.next-day-label {
+  font-size: 0.7rem;
+  color: var(--accent-primary);
+  font-style: italic;
+  font-weight: 400;
+}
+
+/* Cross-midnight segment styles */
+.calendar-task.segment-start {
+  border-bottom: 2px dashed rgba(255, 255, 255, 0.3);
+  border-radius: 6px 6px 0 0;
+}
+
+.calendar-task.segment-continuation {
+  border-top: 2px dashed rgba(255, 255, 255, 0.3);
+  border-radius: 0 0 6px 6px;
+  opacity: 0.85;
+}
+
 /* Modal footer */
 .event-modal-footer {
   display: flex;

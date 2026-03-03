@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
-import { doesTaskOccurOnDate, createVirtualInstance } from '../../utils/recurrence';
+import { doesTaskOccurOnDate, createVirtualInstance, isCrossMidnight, createStartSegmentInstance, createContinuationInstance } from '../../utils/recurrence';
 import {
   format,
   startOfDay,
@@ -266,16 +266,27 @@ export default function ShortTermCalendar() {
   const todayRoutineTasks = useMemo(() => {
     const today = new Date();
     const todayStr = format(today, 'yyyy-MM-dd');
+    const yesterday = addDays(today, -1);
     const results = [];
     for (const t of tasks) {
       if (t.type !== 'routine' || !t.scheduledDate) continue;
+      const crossMid = isCrossMidnight(t);
       if (t.recurrence && t.recurrence !== 'none') {
         if (doesTaskOccurOnDate(t, today)) {
-          results.push(createVirtualInstance(t, today));
+          results.push(crossMid ? createStartSegmentInstance(t, today) : createVirtualInstance(t, today));
+        }
+        if (crossMid && doesTaskOccurOnDate(t, yesterday)) {
+          results.push(createContinuationInstance(t, today));
         }
       } else {
         if (t.scheduledDate.startsWith(todayStr)) {
-          results.push(t);
+          results.push(crossMid ? createStartSegmentInstance(t, today) : t);
+        }
+        if (crossMid) {
+          const yesterdayStr = format(yesterday, 'yyyy-MM-dd');
+          if (t.scheduledDate.startsWith(yesterdayStr)) {
+            results.push(createContinuationInstance(t, today));
+          }
         }
       }
     }
@@ -329,6 +340,7 @@ export default function ShortTermCalendar() {
     startTime: '09:00',
     endTime: '10:00',
     recurrence: 'none',
+    weeklyDays: [],
     customRecurrence: {
       frequency: 'weekly',
       interval: 1,
@@ -383,6 +395,7 @@ export default function ShortTermCalendar() {
       startTime,
       endTime,
       recurrence: 'none',
+      weeklyDays: [],
       customRecurrence: {
         frequency: 'weekly',
         interval: 1,
@@ -663,20 +676,33 @@ export default function ShortTermCalendar() {
     setCurrentDate(new Date());
   };
 
-  // Get tasks for a specific date (with recurring task expansion)
+  // Get tasks for a specific date (with recurring task expansion + cross-midnight segments)
   const getTasksForDate = (date) => {
     const results = [];
+    const prevDate = addDays(date, -1);
     for (const task of tasks) {
       if (!task.scheduledDate) continue;
+      const crossMid = isCrossMidnight(task);
+
       if (task.recurrence && task.recurrence !== 'none') {
         // Recurring: check if this date matches the pattern
         if (doesTaskOccurOnDate(task, date)) {
-          results.push(createVirtualInstance(task, date));
+          results.push(crossMid
+            ? createStartSegmentInstance(task, date)
+            : createVirtualInstance(task, date));
+        }
+        // Cross-midnight continuation: if task occurred yesterday, show morning segment today
+        if (crossMid && doesTaskOccurOnDate(task, prevDate)) {
+          results.push(createContinuationInstance(task, date));
         }
       } else {
         // Non-recurring: exact date match
         if (isSameDay(parseISO(task.scheduledDate), date)) {
-          results.push(task);
+          results.push(crossMid ? createStartSegmentInstance(task, date) : task);
+        }
+        // Non-recurring cross-midnight: continuation from yesterday
+        if (crossMid && isSameDay(parseISO(task.scheduledDate), prevDate)) {
+          results.push(createContinuationInstance(task, date));
         }
       }
     }
@@ -782,6 +808,7 @@ export default function ShortTermCalendar() {
       startTime: actualTask.startTime || '09:00',
       endTime: actualTask.endTime || '10:00',
       recurrence: actualTask.recurrence || 'none',
+      weeklyDays: actualTask.weeklyDays || [],
       customRecurrence: actualTask.customRecurrence || {
         frequency: 'weekly',
         interval: 1,
@@ -831,6 +858,7 @@ export default function ShortTermCalendar() {
       startTime: eventForm.startTime,
       endTime: eventForm.endTime,
       recurrence: eventForm.recurrence,
+      weeklyDays: eventForm.recurrence === 'weekly' ? (eventForm.weeklyDays || []) : null,
       customRecurrence: eventForm.recurrence === 'custom' ? eventForm.customRecurrence : null,
       reminder: eventForm.reminder,
       reminderMinutes: eventForm.reminderMinutes,
@@ -1051,7 +1079,7 @@ export default function ShortTermCalendar() {
                     return (
                       <div
                         key={task.id}
-                        className={`calendar-task ${!customColor ? `priority-${task.priority}` : ''} type-${task.type} ${task.completed ? 'completed' : ''} ${isZoomedIn ? 'zoomed' : ''} ${isDeepZoom ? 'deep-zoom' : ''} ${isUltraZoom ? 'ultra-zoom' : ''} ${customColor ? 'custom-color' : ''} ${durationCls} ${compactMode ? 'compact' : ''}`}
+                        className={`calendar-task ${!customColor ? `priority-${task.priority}` : ''} type-${task.type} ${task.completed ? 'completed' : ''} ${isZoomedIn ? 'zoomed' : ''} ${isDeepZoom ? 'deep-zoom' : ''} ${isUltraZoom ? 'ultra-zoom' : ''} ${customColor ? 'custom-color' : ''} ${durationCls} ${compactMode ? 'compact' : ''} ${task._segment === 'start' ? 'segment-start' : ''} ${task._segment === 'continuation' ? 'segment-continuation' : ''}`}
                         style={colorStyle}
                         onClick={(e) => handleTaskClick(task, e)}
                         onDoubleClick={(e) => handleTaskDoubleClick(task, e)}
@@ -1101,11 +1129,13 @@ export default function ShortTermCalendar() {
                             )}
                           </>
                         )}
-                        {/* Resize handle at bottom edge */}
-                        <div
-                          className="resize-handle"
-                          onMouseDown={(e) => handleResizeMouseDown(task, e)}
-                        />
+                        {/* Resize handle at bottom edge (hidden on cross-midnight segments) */}
+                        {!task._segment && (
+                          <div
+                            className="resize-handle"
+                            onMouseDown={(e) => handleResizeMouseDown(task, e)}
+                          />
+                        )}
                       </div>
                     );
                   });
@@ -1288,7 +1318,15 @@ export default function ShortTermCalendar() {
                 />
               </div>
               <div className="form-group">
-                <label>End Time</label>
+                <label>End Time{(() => {
+                  if (!eventForm.startTime || !eventForm.endTime) return null;
+                  const [sH, sM] = eventForm.startTime.split(':').map(Number);
+                  const [eH, eM] = eventForm.endTime.split(':').map(Number);
+                  if ((eH * 60 + eM) < (sH * 60 + sM)) {
+                    return <span className="next-day-label"> (next day)</span>;
+                  }
+                  return null;
+                })()}</label>
                 <input
                   type="time"
                   value={eventForm.endTime}
@@ -1320,6 +1358,33 @@ export default function ShortTermCalendar() {
                 ))}
               </select>
             </div>
+
+            {/* Weekly day-of-week selection */}
+            {eventForm.recurrence === 'weekly' && (
+              <div className="form-group">
+                <label>On days</label>
+                <div className="days-of-week">
+                  {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => (
+                    <button
+                      key={day}
+                      type="button"
+                      className={`day-btn ${eventForm.weeklyDays.includes(idx) ? 'active' : ''}`}
+                      onClick={() => {
+                        const days = [...eventForm.weeklyDays];
+                        if (days.includes(idx)) {
+                          days.splice(days.indexOf(idx), 1);
+                        } else {
+                          days.push(idx);
+                        }
+                        setEventForm({ ...eventForm, weeklyDays: days });
+                      }}
+                    >
+                      {day.charAt(0)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* Custom Recurrence */}
             {showCustomRecurrence && (
