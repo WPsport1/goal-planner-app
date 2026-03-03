@@ -723,13 +723,39 @@ export function AppProvider({ children }) {
     return newTask;
   };
 
+  // Recalculate a goal's progress based on its linked tasks
+  const recalcGoalProgress = (goalId, taskList) => {
+    if (!goalId) return;
+    const linked = taskList.filter((t) => t.linkedGoalId === goalId);
+    if (linked.length === 0) return;
+    const completedCount = linked.filter((t) => t.completed).length;
+    const newProgress = Math.round((completedCount / linked.length) * 100);
+    const goal = goals.find((g) => g.id === goalId);
+    if (goal && goal.progress !== newProgress) {
+      updateGoal(goalId, { progress: newProgress });
+    }
+  };
+
   const updateTask = async (id, updates) => {
+    const oldTask = tasks.find((t) => t.id === id);
+
     // Optimistic update + immediate localStorage save
     setTasks((prev) => {
       const updated = prev.map((task) => (task.id === id ? { ...task, ...updates } : task));
       saveTasksToLocalStorage(updated);
       return updated;
     });
+
+    // Recalculate goal progress if linkedGoalId changed
+    const newLinkedGoalId = updates.linkedGoalId !== undefined ? updates.linkedGoalId : oldTask?.linkedGoalId;
+    if (oldTask?.linkedGoalId && oldTask.linkedGoalId !== newLinkedGoalId) {
+      const tasksWithoutOld = tasks.filter((t) => t.id !== id);
+      recalcGoalProgress(oldTask.linkedGoalId, tasksWithoutOld);
+    }
+    if (newLinkedGoalId) {
+      const updatedTasks = tasks.map((t) => t.id === id ? { ...t, ...updates } : t);
+      recalcGoalProgress(newLinkedGoalId, updatedTasks);
+    }
 
     // Sync to cloud
     if (isConfigured && user) {
@@ -747,12 +773,20 @@ export function AppProvider({ children }) {
   };
 
   const deleteTask = async (id) => {
+    const deletedTask = tasks.find((t) => t.id === id);
+
     // Optimistic update + immediate localStorage save
     setTasks((prev) => {
       const updated = prev.filter((task) => task.id !== id);
       saveTasksToLocalStorage(updated);
       return updated;
     });
+
+    // Recalculate goal progress if deleted task was linked
+    if (deletedTask?.linkedGoalId) {
+      const remainingTasks = tasks.filter((t) => t.id !== id);
+      recalcGoalProgress(deletedTask.linkedGoalId, remainingTasks);
+    }
 
     // Sync to cloud
     if (isConfigured && user) {
@@ -871,6 +905,12 @@ export function AppProvider({ children }) {
       } finally {
         setIsSyncing(false);
       }
+    }
+
+    // Recalc linked goal progress
+    if (task.linkedGoalId) {
+      const updatedTasks = tasks.map((t) => t.id === id ? { ...t, completed: newCompleted } : t);
+      recalcGoalProgress(task.linkedGoalId, updatedTasks);
     }
   };
 

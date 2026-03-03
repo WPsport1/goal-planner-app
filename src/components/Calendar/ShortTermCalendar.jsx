@@ -40,6 +40,7 @@ import {
   ZoomIn,
   ZoomOut,
   Crosshair,
+  Target,
 } from 'lucide-react';
 import './ShortTermCalendar.css';
 
@@ -207,7 +208,7 @@ const computeOverlapLayout = (tasks) => {
 };
 
 export default function ShortTermCalendar() {
-  const { tasks, addTask, updateTask, deleteTask, openDetail, toggleTaskComplete, lastSaveStatus } = useApp();
+  const { tasks, goals, addTask, updateTask, deleteTask, openDetail, toggleTaskComplete, lastSaveStatus } = useApp();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState('day');
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -327,6 +328,9 @@ export default function ShortTermCalendar() {
     return { completed, total, percentage, currentTask, nextTask };
   }, [todayRoutineTasks]);
 
+  // Goal lookup for visual indicators on events
+  const goalMap = useMemo(() => Object.fromEntries(goals.map((g) => [g.id, g])), [goals]);
+
   // Modal state for creating/editing events
   const [showEventModal, setShowEventModal] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
@@ -351,6 +355,7 @@ export default function ShortTermCalendar() {
     },
     reminder: false,
     reminderMinutes: 15,
+    linkedGoalId: '',
   });
   const [showCustomRecurrence, setShowCustomRecurrence] = useState(false);
 
@@ -406,6 +411,7 @@ export default function ShortTermCalendar() {
       },
       reminder: false,
       reminderMinutes: 15,
+      linkedGoalId: '',
     });
     setShowEventModal(true);
   };
@@ -819,6 +825,7 @@ export default function ShortTermCalendar() {
       },
       reminder: actualTask.reminder || false,
       reminderMinutes: actualTask.reminderMinutes || 15,
+      linkedGoalId: actualTask.linkedGoalId || '',
     });
     setShowEventModal(true);
   };
@@ -862,6 +869,7 @@ export default function ShortTermCalendar() {
       customRecurrence: eventForm.recurrence === 'custom' ? eventForm.customRecurrence : null,
       reminder: eventForm.reminder,
       reminderMinutes: eventForm.reminderMinutes,
+      linkedGoalId: eventForm.linkedGoalId || null,
     };
 
     if (editingTask) {
@@ -1098,6 +1106,9 @@ export default function ShortTermCalendar() {
                             )}
                             <span className="task-time">{task.startTime}</span>
                             {showTitle && <span className="task-title">{task.title}</span>}
+                            {task.linkedGoalId && goalMap[task.linkedGoalId] && (
+                              <Target size={9} className="task-goal-icon" />
+                            )}
                           </div>
                         ) : (
                           /* Normal: structured layout */
@@ -1113,6 +1124,9 @@ export default function ShortTermCalendar() {
                               )}
                               <span className="task-time">{task.startTime} - {task.endTime}</span>
                               <span className="task-icons-right">
+                                {task.linkedGoalId && goalMap[task.linkedGoalId] && (
+                                  <Target size={isUltraZoom ? 18 : isDeepZoom ? 14 : isZoomedIn ? 12 : 10} className="task-goal-icon" title={goalMap[task.linkedGoalId].title} />
+                                )}
                                 {task.type === 'routine' && task.reminder && (
                                   <Bell size={isUltraZoom ? 18 : isDeepZoom ? 14 : isZoomedIn ? 12 : 9} className="task-reminder-icon" />
                                 )}
@@ -1555,6 +1569,34 @@ export default function ShortTermCalendar() {
               )}
             </div>
 
+            {/* Link to Goal */}
+            {goals.length > 0 && (
+              <div className="form-group">
+                <label>
+                  <Target size={14} style={{ marginRight: 4, verticalAlign: 'middle' }} />
+                  Link to Goal
+                </label>
+                <select
+                  value={eventForm.linkedGoalId}
+                  onChange={(e) => setEventForm({ ...eventForm, linkedGoalId: e.target.value })}
+                >
+                  <option value="">None</option>
+                  {goals
+                    .slice()
+                    .sort((a, b) => {
+                      const order = { in_progress: 0, not_started: 1, completed: 2, on_hold: 3 };
+                      return (order[a.status] ?? 4) - (order[b.status] ?? 4);
+                    })
+                    .map((goal) => (
+                      <option key={goal.id} value={goal.id}>
+                        {goal.title} ({goal.status.replace('_', ' ')})
+                      </option>
+                    ))
+                  }
+                </select>
+              </div>
+            )}
+
             {/* Description */}
             <div className="form-group">
               <label>Description (optional)</label>
@@ -1626,6 +1668,7 @@ export default function ShortTermCalendar() {
                 startTime: '09:00',
                 endTime: '10:00',
                 recurrence: 'none',
+                weeklyDays: [],
                 customRecurrence: {
                   frequency: 'weekly',
                   interval: 1,
@@ -1636,6 +1679,7 @@ export default function ShortTermCalendar() {
                 },
                 reminder: false,
                 reminderMinutes: 15,
+                linkedGoalId: '',
               });
               setShowCustomRecurrence(false);
               setShowEventModal(true);
