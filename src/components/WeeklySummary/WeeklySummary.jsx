@@ -3,6 +3,7 @@ import { useApp } from '../../context/AppContext';
 import {
   X,
   Calendar,
+  Clock,
   TrendingUp,
   TrendingDown,
   Target,
@@ -108,6 +109,42 @@ export default function WeeklySummary() {
     const prevRate = prevTotal > 0 ? Math.round((prevCompleted / prevTotal) * 100) : 0;
     const trend = completionRate - prevRate;
 
+    // Time allocation by goal
+    const timeByGoal = {};
+    let totalMinutes = 0;
+    weekTasks.forEach((t) => {
+      if (!t.startTime || !t.endTime) return;
+      const [tsH, tsM] = t.startTime.split(':').map(Number);
+      const [teH, teM] = t.endTime.split(':').map(Number);
+      const mins = (teH * 60 + teM) - (tsH * 60 + tsM);
+      if (mins <= 0) return;
+      totalMinutes += mins;
+      const key = t.linkedGoalId || '__unlinked__';
+      timeByGoal[key] = (timeByGoal[key] || 0) + mins;
+    });
+
+    // Time allocation by type
+    const timeByType = { task: 0, habit: 0, appointment: 0, routine: 0 };
+    weekTasks.forEach((t) => {
+      if (!t.startTime || !t.endTime) return;
+      const [tsH, tsM] = t.startTime.split(':').map(Number);
+      const [teH, teM] = t.endTime.split(':').map(Number);
+      const mins = (teH * 60 + teM) - (tsH * 60 + tsM);
+      if (mins <= 0) return;
+      if (timeByType[t.type] !== undefined) timeByType[t.type] += mins;
+    });
+
+    // Goal progress this week
+    const goalProgress = {};
+    weekTasks.forEach((t) => {
+      if (!t.linkedGoalId) return;
+      if (!goalProgress[t.linkedGoalId]) {
+        goalProgress[t.linkedGoalId] = { completed: 0, total: 0 };
+      }
+      goalProgress[t.linkedGoalId].total++;
+      if (t.completed) goalProgress[t.linkedGoalId].completed++;
+    });
+
     return {
       completed,
       total,
@@ -117,6 +154,10 @@ export default function WeeklySummary() {
       uniqueHabits,
       trend,
       prevRate,
+      timeByGoal,
+      totalMinutes,
+      timeByType,
+      goalProgress,
     };
   }, [weekTasks, weekDays, tasks, weekStart, weekEnd]);
 
@@ -279,7 +320,7 @@ export default function WeeklySummary() {
             </div>
           </div>
 
-          {/* Type Breakdown */}
+          {/* Type Breakdown (enhanced with time) */}
           <div className="type-breakdown-section">
             <h3>
               <Target size={18} />
@@ -300,10 +341,83 @@ export default function WeeklySummary() {
                   <span className="type-count">
                     {data.completed}/{data.total}
                   </span>
+                  {stats.timeByType[type] > 0 && (
+                    <span className="type-time">
+                      {Math.floor(stats.timeByType[type] / 60)}h {stats.timeByType[type] % 60}m
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
           </div>
+
+          {/* Time Allocation by Goal */}
+          {stats.totalMinutes > 0 && (
+            <div className="time-allocation-section">
+              <h3>
+                <Clock size={18} />
+                Time Allocation by Goal
+              </h3>
+              <div className="time-total">
+                {Math.floor(stats.totalMinutes / 60)}h {stats.totalMinutes % 60}m scheduled this week
+              </div>
+              <div className="time-bars">
+                {Object.entries(stats.timeByGoal)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([goalId, minutes]) => {
+                    const goal = goals.find((g) => g.id === goalId);
+                    const label = goalId === '__unlinked__' ? 'Unlinked tasks' : (goal?.title || 'Unknown goal');
+                    const pct = Math.round((minutes / stats.totalMinutes) * 100);
+                    const hours = Math.floor(minutes / 60);
+                    const mins = minutes % 60;
+                    return (
+                      <div key={goalId} className={`time-bar-item ${goalId === '__unlinked__' ? 'unlinked' : ''}`}>
+                        <div className="time-bar-label">
+                          <span className="time-bar-name">{label}</span>
+                          <span className="time-bar-value">{hours}h {mins}m ({pct}%)</span>
+                        </div>
+                        <div className="time-bar-track">
+                          <div className="time-bar-fill" style={{ width: `${pct}%` }} />
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
+
+          {/* Goal Progress This Week */}
+          {Object.keys(stats.goalProgress).length > 0 && (
+            <div className="goal-progress-section">
+              <h3>
+                <Target size={18} />
+                Goal Progress This Week
+              </h3>
+              <div className="goal-progress-list">
+                {Object.entries(stats.goalProgress)
+                  .sort((a, b) => b[1].total - a[1].total)
+                  .map(([goalId, data]) => {
+                    const goal = goals.find((g) => g.id === goalId);
+                    if (!goal) return null;
+                    const weekRate = Math.round((data.completed / data.total) * 100);
+                    return (
+                      <div key={goalId} className="goal-progress-item">
+                        <div className="goal-progress-header">
+                          <span className="goal-progress-name">{goal.title}</span>
+                          <span className="goal-progress-week-rate">{data.completed}/{data.total} this week</span>
+                        </div>
+                        <div className="goal-week-bar">
+                          <div className="goal-week-fill" style={{ width: `${weekRate}%` }} />
+                        </div>
+                        <div className="goal-overall-progress">
+                          Overall progress: {goal.progress || 0}%
+                        </div>
+                      </div>
+                    );
+                  })}
+              </div>
+            </div>
+          )}
 
           {/* Habit Streaks */}
           {stats.uniqueHabits.length > 0 && (

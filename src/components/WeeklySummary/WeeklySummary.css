@@ -252,6 +252,8 @@
 /* Daily Chart */
 .daily-chart-section h3,
 .type-breakdown-section h3,
+.time-allocation-section h3,
+.goal-progress-section h3,
 .habits-section h3,
 .reflections-section h3 {
   display: flex;
@@ -265,6 +267,8 @@
 
 .daily-chart-section h3 svg,
 .type-breakdown-section h3 svg,
+.time-allocation-section h3 svg,
+.goal-progress-section h3 svg,
 .habits-section h3 svg,
 .reflections-section h3 svg {
   color: var(--accent-primary);
@@ -378,6 +382,128 @@
   color: var(--text-secondary);
   width: 50px;
   text-align: right;
+}
+
+/* Type Time (hours alongside count) */
+.type-time {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  width: 55px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* Time Allocation by Goal */
+.time-total {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-bottom: 0.75rem;
+  padding-left: 0.25rem;
+}
+
+.time-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.time-bar-item {
+  padding: 0.75rem 1rem;
+  background: var(--bg-tertiary);
+  border-radius: 10px;
+}
+
+.time-bar-item.unlinked {
+  opacity: 0.7;
+}
+
+.time-bar-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.time-bar-name {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.time-bar-value {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.time-bar-track {
+  height: 10px;
+  background: var(--bg-elevated);
+  border-radius: 5px;
+  overflow: hidden;
+}
+
+.time-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
+  border-radius: 5px;
+  transition: width 0.3s ease;
+}
+
+.time-bar-item.unlinked .time-bar-fill {
+  background: var(--text-muted);
+}
+
+/* Goal Progress This Week */
+.goal-progress-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.goal-progress-item {
+  padding: 0.75rem 1rem;
+  background: var(--bg-tertiary);
+  border-radius: 10px;
+}
+
+.goal-progress-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+.goal-progress-name {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.goal-progress-week-rate {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--accent-primary);
+}
+
+.goal-week-bar {
+  height: 8px;
+  background: var(--bg-elevated);
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 0.375rem;
+}
+
+.goal-week-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #22c55e 0%, #16a34a 100%);
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.goal-overall-progress {
+  font-size: 0.7rem;
+  color: var(--text-muted);
 }
 
 /* Habits Section */
@@ -498,5 +624,17 @@
 
   .type-name {
     width: 80px;
+  }
+
+  .type-time {
+    display: none;
+  }
+
+  .time-bar-item {
+    padding: 0.625rem 0.75rem;
+  }
+
+  .goal-progress-item {
+    padding: 0.625rem 0.75rem;
   }
 }
