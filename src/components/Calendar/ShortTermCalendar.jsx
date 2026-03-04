@@ -420,8 +420,9 @@ export default function ShortTermCalendar() {
   const [dragState, setDragState] = useState({ active: false, type: null });
   const dragRef = useRef({
     active: false,
-    type: null,       // 'create' | 'resize'
+    type: null,       // 'create' | 'resize' | 'move'
     startY: 0,
+    startX: 0,
     startMinutes: 0,
     currentMinutes: 0,
     date: null,
@@ -433,6 +434,15 @@ export default function ShortTermCalendar() {
     taskStartMinutes: 0,
     originalEndMinutes: 0,
     taskEl: null,
+    // Move-specific
+    moveTask: null,
+    moveDuration: 0,
+    moveOriginalDate: null,
+    moveGrabOffsetMin: 0,
+    moveCurrentDate: null,
+    moveCurrentStartMin: 0,
+    moveTaskEl: null,
+    moveTimeGridEl: null,
   });
 
   // Stable ref wrapper so document listeners always call latest closure
@@ -440,6 +450,7 @@ export default function ShortTermCalendar() {
   const handleDragEndRef = useRef(null);
   const stableDragMove = useRef((e) => handleDragMoveRef.current?.(e)).current;
   const stableDragEnd = useRef((e) => handleDragEndRef.current?.(e)).current;
+  const moveWasDraggedRef = useRef(false);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -449,6 +460,36 @@ export default function ShortTermCalendar() {
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     };
+  }, []);
+
+  // Escape key cancels any active drag
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape' && dragRef.current.active) {
+        e.preventDefault();
+        const drag = dragRef.current;
+        if (drag.type === 'move' && drag.moveTaskEl) {
+          drag.moveTaskEl.style.opacity = '';
+          drag.moveTaskEl.style.transition = '';
+        }
+        if (drag.type === 'resize' && drag.taskEl) {
+          drag.taskEl.style.height = '';
+          drag.taskEl.style.minHeight = '';
+          drag.taskEl.style.transition = '';
+        }
+        if (drag.ghostEl) { drag.ghostEl.remove(); drag.ghostEl = null; }
+        if (drag.tooltipEl) { drag.tooltipEl.remove(); drag.tooltipEl = null; }
+        document.removeEventListener('mousemove', stableDragMove);
+        document.removeEventListener('mouseup', stableDragEnd);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+        setDragState({ active: false, type: null });
+        drag.active = false;
+        drag.type = null;
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   // --- Ghost & Tooltip DOM manipulation (no React re-renders) ---
@@ -485,6 +526,9 @@ export default function ShortTermCalendar() {
     if (drag.type === 'create') {
       startMin = Math.min(drag.startMinutes, drag.currentMinutes);
       endMin = Math.max(drag.startMinutes, drag.currentMinutes);
+    } else if (drag.type === 'move') {
+      startMin = drag.moveCurrentStartMin;
+      endMin = drag.moveCurrentStartMin + drag.moveDuration;
     } else {
       startMin = drag.taskStartMinutes;
       endMin = drag.currentMinutes;
@@ -494,7 +538,19 @@ export default function ShortTermCalendar() {
     const focusOff = isHourFocus
       ? Math.max(0, focusHour - focusPaddingHours) * 60 * SLOT_HEIGHT
       : 0;
-    drag.tooltipEl.style.top = `${endMin * SLOT_HEIGHT - focusOff + 4}px`;
+    if (drag.type === 'move') {
+      // Position tooltip below the ghost in the time-grid coordinate space
+      const targetDaySlotEl = findDaySlotUnderDate(drag.moveCurrentDate, drag.moveTimeGridEl);
+      if (targetDaySlotEl) {
+        const gridRect = drag.moveTimeGridEl.getBoundingClientRect();
+        const dayRect = targetDaySlotEl.getBoundingClientRect();
+        drag.tooltipEl.style.left = `${dayRect.left - gridRect.left + dayRect.width / 2}px`;
+        drag.tooltipEl.style.transform = 'translateX(-50%)';
+      }
+      drag.tooltipEl.style.top = `${endMin * SLOT_HEIGHT - focusOff + 4}px`;
+    } else {
+      drag.tooltipEl.style.top = `${endMin * SLOT_HEIGHT - focusOff + 4}px`;
+    }
   };
 
   const updateResizeVisual = (drag) => {
@@ -504,6 +560,62 @@ export default function ShortTermCalendar() {
     drag.taskEl.style.height = `${heightPx}px`;
     drag.taskEl.style.minHeight = `${heightPx}px`;
     drag.taskEl.style.transition = 'none';
+  };
+
+  // --- Move ghost helpers ---
+  const findDaySlotUnderDate = (date, timeGridEl) => {
+    if (!timeGridEl) return null;
+    const dateStr = format(date, 'yyyy-MM-dd');
+    const dayCol = timeGridEl.querySelector(`.day-column[data-date="${dateStr}"]`);
+    return dayCol ? dayCol.querySelector('.day-slots') : null;
+  };
+
+  const findDaySlotUnderCursor = (clientX, clientY, timeGridEl) => {
+    const drag = dragRef.current;
+    if (drag.ghostEl) drag.ghostEl.style.pointerEvents = 'none';
+    if (drag.tooltipEl) drag.tooltipEl.style.pointerEvents = 'none';
+    const el = document.elementFromPoint(clientX, clientY);
+    if (drag.ghostEl) drag.ghostEl.style.pointerEvents = '';
+    if (drag.tooltipEl) drag.tooltipEl.style.pointerEvents = '';
+    if (!el) return null;
+    const daySlots = el.closest('.day-slots');
+    if (daySlots && timeGridEl.contains(daySlots)) return daySlots;
+    return null;
+  };
+
+  const createMoveGhostElement = (drag) => {
+    const ghost = document.createElement('div');
+    ghost.className = 'move-ghost-preview';
+    ghost.textContent = drag.moveTask.title || '';
+    drag.moveTimeGridEl.appendChild(ghost);
+    drag.ghostEl = ghost;
+  };
+
+  const createMoveTooltipElement = (drag) => {
+    const tooltip = document.createElement('div');
+    tooltip.className = 'drag-time-tooltip';
+    tooltip.style.position = 'absolute';
+    drag.moveTimeGridEl.appendChild(tooltip);
+    drag.tooltipEl = tooltip;
+  };
+
+  const updateMoveGhostElement = (drag) => {
+    if (!drag.ghostEl) return;
+    const targetDaySlotEl = findDaySlotUnderDate(drag.moveCurrentDate, drag.moveTimeGridEl);
+    if (!targetDaySlotEl) return;
+    const gridRect = drag.moveTimeGridEl.getBoundingClientRect();
+    const daySlotRect = targetDaySlotEl.getBoundingClientRect();
+    const left = daySlotRect.left - gridRect.left + 4;
+    const width = daySlotRect.width - 8;
+    const focusOff = isHourFocus
+      ? Math.max(0, focusHour - focusPaddingHours) * 60 * SLOT_HEIGHT
+      : 0;
+    const top = drag.moveCurrentStartMin * SLOT_HEIGHT - focusOff + GAP_PX;
+    const height = Math.max(2, drag.moveDuration * SLOT_HEIGHT - GAP_PX * 2);
+    drag.ghostEl.style.left = `${left}px`;
+    drag.ghostEl.style.width = `${width}px`;
+    drag.ghostEl.style.top = `${top}px`;
+    drag.ghostEl.style.height = `${height}px`;
   };
 
   // --- Core drag handlers ---
@@ -534,6 +646,34 @@ export default function ShortTermCalendar() {
       const minutes = snapTo5(yToMinutes(e.clientY, drag.daySlotEl));
       drag.currentMinutes = Math.max(drag.taskStartMinutes + 5, minutes);
       updateResizeVisual(drag);
+      updateTooltipElement(drag);
+    } else if (drag.type === 'move') {
+      if (!drag.active) {
+        const dx = e.clientX - drag.startX;
+        const dy = e.clientY - drag.startY;
+        if (Math.sqrt(dx * dx + dy * dy) < DRAG_THRESHOLD) return;
+        drag.active = true;
+        setDragState({ active: true, type: 'move' });
+        document.body.style.cursor = 'grabbing';
+        document.body.style.userSelect = 'none';
+        if (drag.moveTaskEl) {
+          drag.moveTaskEl.style.opacity = '0.3';
+          drag.moveTaskEl.style.transition = 'none';
+        }
+        createMoveGhostElement(drag);
+        createMoveTooltipElement(drag);
+      }
+      const hoveredDaySlotEl = findDaySlotUnderCursor(e.clientX, e.clientY, drag.moveTimeGridEl);
+      if (hoveredDaySlotEl) {
+        const dayColumnEl = hoveredDaySlotEl.closest('.day-column');
+        const dateStr = dayColumnEl?.getAttribute('data-date');
+        if (dateStr) drag.moveCurrentDate = parseISO(dateStr);
+        const cursorMinutes = yToMinutes(e.clientY, hoveredDaySlotEl);
+        let newStartMin = snapTo5(cursorMinutes - drag.moveGrabOffsetMin);
+        newStartMin = Math.max(0, Math.min(1440 - drag.moveDuration, newStartMin));
+        drag.moveCurrentStartMin = newStartMin;
+      }
+      updateMoveGhostElement(drag);
       updateTooltipElement(drag);
     }
   };
@@ -572,6 +712,27 @@ export default function ShortTermCalendar() {
           drag.taskEl.style.minHeight = '';
           drag.taskEl.style.transition = '';
         }
+      }
+    } else if (drag.type === 'move') {
+      // Restore original task appearance
+      if (drag.moveTaskEl) {
+        drag.moveTaskEl.style.opacity = '';
+        drag.moveTaskEl.style.transition = '';
+      }
+      if (drag.active) {
+        moveWasDraggedRef.current = true;
+        const newStartMin = drag.moveCurrentStartMin;
+        const newEndMin = newStartMin + drag.moveDuration;
+        const newDateStr = format(drag.moveCurrentDate, 'yyyy-MM-dd');
+        const [year, month, day] = newDateStr.split('-').map(Number);
+        const startH = Math.floor(newStartMin / 60);
+        const startM = newStartMin % 60;
+        const localDate = new Date(year, month - 1, day, startH, startM);
+        updateTask(drag.taskId, {
+          scheduledDate: localDate.toISOString(),
+          startTime: minutesToTimeStr(newStartMin),
+          endTime: minutesToTimeStr(newEndMin),
+        });
       }
     }
 
@@ -629,6 +790,55 @@ export default function ShortTermCalendar() {
       ghostEl: null,
       tooltipEl: null,
     };
+    document.addEventListener('mousemove', stableDragMove);
+    document.addEventListener('mouseup', stableDragEnd);
+  };
+
+  // Mousedown on calendar-task body → potential drag-to-move
+  const handleMoveMouseDown = (task, e) => {
+    if (e.target.closest('.resize-handle')) return;
+    if (e.target.closest('.routine-task-check')) return;
+    if (e.button !== 0) return;
+    if (task._segment === 'continuation') return;
+
+    e.stopPropagation();
+
+    const taskEl = e.currentTarget;
+    const daySlotEl = taskEl.closest('.day-slots');
+    const timeGridEl = taskEl.closest('.time-grid');
+    const dayColumnEl = taskEl.closest('.day-column');
+    const dateStr = dayColumnEl?.getAttribute('data-date');
+    const taskDate = dateStr ? parseISO(dateStr) : new Date();
+
+    const [sH, sM] = task.startTime.split(':').map(Number);
+    const [eH, eM] = task.endTime.split(':').map(Number);
+    const startMin = sH * 60 + sM;
+    const endMin = eH * 60 + eM;
+    const duration = endMin - startMin;
+
+    const cursorMinutes = yToMinutes(e.clientY, daySlotEl);
+    const grabOffset = Math.max(0, cursorMinutes - startMin);
+
+    dragRef.current = {
+      ...dragRef.current,
+      active: false,
+      type: 'move',
+      startY: e.clientY,
+      startX: e.clientX,
+      daySlotEl,
+      ghostEl: null,
+      tooltipEl: null,
+      taskId: task._isVirtual ? task._parentId : task.id,
+      moveTask: task,
+      moveDuration: duration,
+      moveOriginalDate: taskDate,
+      moveGrabOffsetMin: grabOffset,
+      moveCurrentDate: taskDate,
+      moveCurrentStartMin: startMin,
+      moveTaskEl: taskEl,
+      moveTimeGridEl: timeGridEl,
+    };
+
     document.addEventListener('mousemove', stableDragMove);
     document.addEventListener('mouseup', stableDragEnd);
   };
@@ -799,6 +1009,8 @@ export default function ShortTermCalendar() {
   // Handle click on existing task to edit
   const handleTaskClick = (task, e) => {
     e.stopPropagation();
+    // Suppress click after a completed drag-to-move
+    if (moveWasDraggedRef.current) { moveWasDraggedRef.current = false; return; }
     // For virtual recurring instances, resolve to the parent task
     const actualTask = task._isVirtual
       ? tasks.find(t => t.id === task._parentId) || task
@@ -918,7 +1130,7 @@ export default function ShortTermCalendar() {
       : Array.from({ length: 24 }, (_, i) => i);
 
     return (
-      <div className={`time-grid-container ${isHourFocus ? 'hour-focus-mode' : ''} ${dragState.active ? 'is-dragging' : ''}`} ref={calendarRef} style={isHourFocus ? { overflow: 'hidden' } : {}}>
+      <div className={`time-grid-container ${isHourFocus ? 'hour-focus-mode' : ''} ${dragState.active ? 'is-dragging' : ''} ${dragState.active && dragState.type === 'move' ? 'is-dragging-move' : ''}`} ref={calendarRef} style={isHourFocus ? { overflow: 'hidden' } : {}}>
         <div className={`time-grid ${isMultiDay ? 'multi-day' : 'single-day'}`} style={isHourFocus ? { minHeight: `${HOUR_HEIGHT * focusWindowHours}px`, position: 'relative' } : { minHeight: `${24 * HOUR_HEIGHT}px` }}>
           {/* Time labels column */}
           {showTimeColumn && (
@@ -957,7 +1169,7 @@ export default function ShortTermCalendar() {
             const focusOffset = isHourFocus ? Math.max(0, focusHour - focusPaddingHours) * 60 * SLOT_HEIGHT : 0;
 
             return (
-              <div key={date.toISOString()} className="day-column">
+              <div key={date.toISOString()} className="day-column" data-date={format(date, 'yyyy-MM-dd')}>
                 {/* Day header for multi-day view */}
                 {isMultiDay && (
                   <div className={`day-header ${isToday(date) ? 'today' : ''}`}>
@@ -1089,6 +1301,7 @@ export default function ShortTermCalendar() {
                         key={task.id}
                         className={`calendar-task ${!customColor ? `priority-${task.priority}` : ''} type-${task.type} ${task.completed ? 'completed' : ''} ${isZoomedIn ? 'zoomed' : ''} ${isDeepZoom ? 'deep-zoom' : ''} ${isUltraZoom ? 'ultra-zoom' : ''} ${customColor ? 'custom-color' : ''} ${durationCls} ${compactMode ? 'compact' : ''} ${task._segment === 'start' ? 'segment-start' : ''} ${task._segment === 'continuation' ? 'segment-continuation' : ''}`}
                         style={colorStyle}
+                        onMouseDown={(e) => handleMoveMouseDown(task, e)}
                         onClick={(e) => handleTaskClick(task, e)}
                         onDoubleClick={(e) => handleTaskDoubleClick(task, e)}
                         title={`${task.title}\n${task.startTime} - ${task.endTime}${task.description ? '\n' + task.description : ''}${view === 'day' ? '\nDouble-click to zoom in' : ''}`}

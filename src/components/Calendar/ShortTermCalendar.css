@@ -362,7 +362,7 @@
   border-radius: 4px;
   padding: 0px 0.35rem;
   overflow: hidden;
-  cursor: pointer;
+  cursor: grab;
   transition: transform 0.15s ease, box-shadow 0.15s ease, filter 0.15s ease;
   z-index: 5;
   /* NO min-height — event height is 100% driven by duration */
@@ -1659,6 +1659,35 @@
   filter: none;
   transform: none;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4), 0 0 0 0.5px rgba(255, 255, 255, 0.08);
+}
+
+/* =============================================
+   Move Ghost Preview (appended to .time-grid)
+   ============================================= */
+.move-ghost-preview {
+  position: absolute;
+  background: rgba(99, 102, 241, 0.3);
+  border: 2px dashed rgba(99, 102, 241, 0.6);
+  border-left: 4px solid rgba(99, 102, 241, 0.9);
+  border-radius: 4px;
+  pointer-events: none;
+  z-index: 25;
+  color: rgba(255, 255, 255, 0.8);
+  font-size: 0.75rem;
+  padding: 2px 6px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* =============================================
+   Move-active state — grabbing cursor
+   ============================================= */
+.time-grid-container.is-dragging-move,
+.time-grid-container.is-dragging-move .day-slots,
+.time-grid-container.is-dragging-move .calendar-task {
+  cursor: grabbing;
 }
 
 /* Responsive */
