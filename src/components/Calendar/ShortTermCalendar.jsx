@@ -41,6 +41,7 @@ import {
   ZoomOut,
   Crosshair,
   Target,
+  Search,
 } from 'lucide-react';
 import './ShortTermCalendar.css';
 
@@ -263,6 +264,11 @@ export default function ShortTermCalendar() {
   // Routine progress banner visibility (collapsed by default to prioritize calendar)
   const [routineBannerOpen, setRoutineBannerOpen] = useState(false);
 
+  // Search & filter state
+  const [showSearchBar, setShowSearchBar] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeTypeFilters, setActiveTypeFilters] = useState([]);
+
   // Routine progress tracking for today (including recurring routines)
   const todayRoutineTasks = useMemo(() => {
     const today = new Date();
@@ -330,6 +336,23 @@ export default function ShortTermCalendar() {
 
   // Goal lookup for visual indicators on events
   const goalMap = useMemo(() => Object.fromEntries(goals.map((g) => [g.id, g])), [goals]);
+
+  // Filtered tasks for search/filter — does NOT affect todayRoutineTasks
+  const filteredTasks = useMemo(() => {
+    const hasSearch = searchQuery.trim().length > 0;
+    const hasTypeFilter = activeTypeFilters.length > 0;
+    if (!hasSearch && !hasTypeFilter) return tasks;
+    const query = searchQuery.trim().toLowerCase();
+    return tasks.filter((task) => {
+      if (hasTypeFilter && !activeTypeFilters.includes(task.type)) return false;
+      if (hasSearch) {
+        const titleMatch = task.title?.toLowerCase().includes(query);
+        const descMatch = task.description?.toLowerCase().includes(query);
+        if (!titleMatch && !descMatch) return false;
+      }
+      return true;
+    });
+  }, [tasks, searchQuery, activeTypeFilters]);
 
   // Modal state for creating/editing events
   const [showEventModal, setShowEventModal] = useState(false);
@@ -896,7 +919,7 @@ export default function ShortTermCalendar() {
   const getTasksForDate = (date) => {
     const results = [];
     const prevDate = addDays(date, -1);
-    for (const task of tasks) {
+    for (const task of filteredTasks) {
       if (!task.scheduledDate) continue;
       const crossMid = isCrossMidnight(task);
 
@@ -1901,6 +1924,13 @@ export default function ShortTermCalendar() {
             <Plus size={14} />
             Add
           </button>
+          <button
+            className={`search-toggle-btn ${showSearchBar ? 'active' : ''}`}
+            onClick={() => setShowSearchBar(!showSearchBar)}
+            title="Search & filter events"
+          >
+            <Search size={14} />
+          </button>
           <div className="view-selector">
             {viewOptions.map((option) => (
               <button
@@ -1983,6 +2013,52 @@ export default function ShortTermCalendar() {
           )}
         </div>
       </div>
+
+      {/* Search & Filter Bar */}
+      {showSearchBar && (
+        <div className="search-filter-bar">
+          <div className="search-input-wrapper">
+            <Search size={14} className="search-icon" />
+            <input
+              type="text"
+              placeholder="Search events..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              autoFocus
+            />
+            {searchQuery && (
+              <button className="search-clear-btn" onClick={() => setSearchQuery('')} title="Clear search">
+                <X size={14} />
+              </button>
+            )}
+          </div>
+          <div className="type-filter-chips">
+            {taskTypeOptions.map((opt) => (
+              <button
+                key={opt.value}
+                className={`type-chip ${activeTypeFilters.includes(opt.value) ? 'active' : ''}`}
+                onClick={() => setActiveTypeFilters((prev) =>
+                  prev.includes(opt.value)
+                    ? prev.filter((t) => t !== opt.value)
+                    : [...prev, opt.value]
+                )}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+          {(searchQuery || activeTypeFilters.length > 0) && (
+            <div className="search-result-info">
+              <span className="result-count">
+                {filteredTasks.length} event{filteredTasks.length !== 1 ? 's' : ''}
+              </span>
+              <button className="clear-all-filters-btn" onClick={() => { setSearchQuery(''); setActiveTypeFilters([]); }}>
+                Clear all
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Routine Progress — collapsed by default, toggle to expand */}
       {routineProgress && isToday(currentDate) && (
