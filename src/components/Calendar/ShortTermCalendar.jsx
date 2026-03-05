@@ -416,6 +416,17 @@ export default function ShortTermCalendar() {
     return Math.max(0, Math.min(1439, rawMinutes));
   };
 
+  // Extract client coordinates from mouse or touch events
+  const getEventXY = (e) => {
+    if (e.touches && e.touches.length > 0) {
+      return { clientX: e.touches[0].clientX, clientY: e.touches[0].clientY };
+    }
+    if (e.changedTouches && e.changedTouches.length > 0) {
+      return { clientX: e.changedTouches[0].clientX, clientY: e.changedTouches[0].clientY };
+    }
+    return { clientX: e.clientX, clientY: e.clientY };
+  };
+
   // Open the create-event modal with pre-filled times
   const openCreateModal = (date, startTime, endTime) => {
     setEditingTask(null);
@@ -472,6 +483,7 @@ export default function ShortTermCalendar() {
     moveCurrentStartMin: 0,
     moveTaskEl: null,
     moveTimeGridEl: null,
+    isTouch: false,
   });
 
   // Stable ref wrapper so document listeners always call latest closure
@@ -479,13 +491,27 @@ export default function ShortTermCalendar() {
   const handleDragEndRef = useRef(null);
   const stableDragMove = useRef((e) => handleDragMoveRef.current?.(e)).current;
   const stableDragEnd = useRef((e) => handleDragEndRef.current?.(e)).current;
+
+  // Touch-specific stable refs
+  const stableTouchMove = useRef((e) => {
+    if (dragRef.current.active) e.preventDefault(); // prevent scroll during active drag
+    handleDragMoveRef.current?.(e);
+  }).current;
+  const stableTouchEnd = useRef((e) => handleDragEndRef.current?.(e)).current;
+
   const moveWasDraggedRef = useRef(false);
+
+  // Ref for tap-to-create on touch (tracks start position to detect tap vs scroll)
+  const touchTapRef = useRef({ startX: 0, startY: 0, date: null, daySlotEl: null });
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       document.removeEventListener('mousemove', stableDragMove);
       document.removeEventListener('mouseup', stableDragEnd);
+      document.removeEventListener('touchmove', stableTouchMove);
+      document.removeEventListener('touchend', stableTouchEnd);
+      document.removeEventListener('touchcancel', stableTouchEnd);
       document.body.style.cursor = '';
       document.body.style.userSelect = '';
     };
@@ -510,6 +536,9 @@ export default function ShortTermCalendar() {
         if (drag.tooltipEl) { drag.tooltipEl.remove(); drag.tooltipEl = null; }
         document.removeEventListener('mousemove', stableDragMove);
         document.removeEventListener('mouseup', stableDragEnd);
+        document.removeEventListener('touchmove', stableTouchMove);
+        document.removeEventListener('touchend', stableTouchEnd);
+        document.removeEventListener('touchcancel', stableTouchEnd);
         document.body.style.cursor = '';
         document.body.style.userSelect = '';
         setDragState({ active: false, type: null });
@@ -650,40 +679,42 @@ export default function ShortTermCalendar() {
   // --- Core drag handlers ---
   const handleDragMove = (e) => {
     const drag = dragRef.current;
+    const { clientX, clientY } = getEventXY(e);
+    const threshold = drag.isTouch ? 10 : DRAG_THRESHOLD; // slightly higher threshold for touch
     if (drag.type === 'create') {
       if (!drag.active) {
-        if (Math.abs(e.clientY - drag.startY) < DRAG_THRESHOLD) return;
+        if (Math.abs(clientY - drag.startY) < threshold) return;
         drag.active = true;
         setDragState({ active: true, type: 'create' });
-        document.body.style.cursor = 'ns-resize';
+        if (!drag.isTouch) document.body.style.cursor = 'ns-resize';
         document.body.style.userSelect = 'none';
         createGhostElement(drag);
         createTooltipElement(drag);
       }
-      drag.currentMinutes = snapTo5(yToMinutes(e.clientY, drag.daySlotEl));
+      drag.currentMinutes = snapTo5(yToMinutes(clientY, drag.daySlotEl));
       updateGhostElement(drag);
       updateTooltipElement(drag);
     } else if (drag.type === 'resize') {
       if (!drag.active) {
-        if (Math.abs(e.clientY - drag.startY) < DRAG_THRESHOLD) return;
+        if (Math.abs(clientY - drag.startY) < threshold) return;
         drag.active = true;
         setDragState({ active: true, type: 'resize' });
-        document.body.style.cursor = 'ns-resize';
+        if (!drag.isTouch) document.body.style.cursor = 'ns-resize';
         document.body.style.userSelect = 'none';
         createTooltipElement(drag);
       }
-      const minutes = snapTo5(yToMinutes(e.clientY, drag.daySlotEl));
+      const minutes = snapTo5(yToMinutes(clientY, drag.daySlotEl));
       drag.currentMinutes = Math.max(drag.taskStartMinutes + 5, minutes);
       updateResizeVisual(drag);
       updateTooltipElement(drag);
     } else if (drag.type === 'move') {
       if (!drag.active) {
-        const dx = e.clientX - drag.startX;
-        const dy = e.clientY - drag.startY;
-        if (Math.sqrt(dx * dx + dy * dy) < DRAG_THRESHOLD) return;
+        const dx = clientX - drag.startX;
+        const dy = clientY - drag.startY;
+        if (Math.sqrt(dx * dx + dy * dy) < threshold) return;
         drag.active = true;
         setDragState({ active: true, type: 'move' });
-        document.body.style.cursor = 'grabbing';
+        if (!drag.isTouch) document.body.style.cursor = 'grabbing';
         document.body.style.userSelect = 'none';
         if (drag.moveTaskEl) {
           drag.moveTaskEl.style.opacity = '0.3';
@@ -691,13 +722,15 @@ export default function ShortTermCalendar() {
         }
         createMoveGhostElement(drag);
         createMoveTooltipElement(drag);
+        // Haptic feedback on touch when drag activates
+        if (drag.isTouch && navigator.vibrate) navigator.vibrate(30);
       }
-      const hoveredDaySlotEl = findDaySlotUnderCursor(e.clientX, e.clientY, drag.moveTimeGridEl);
+      const hoveredDaySlotEl = findDaySlotUnderCursor(clientX, clientY, drag.moveTimeGridEl);
       if (hoveredDaySlotEl) {
         const dayColumnEl = hoveredDaySlotEl.closest('.day-column');
         const dateStr = dayColumnEl?.getAttribute('data-date');
         if (dateStr) drag.moveCurrentDate = parseISO(dateStr);
-        const cursorMinutes = yToMinutes(e.clientY, hoveredDaySlotEl);
+        const cursorMinutes = yToMinutes(clientY, hoveredDaySlotEl);
         let newStartMin = snapTo5(cursorMinutes - drag.moveGrabOffsetMin);
         newStartMin = Math.max(0, Math.min(1440 - drag.moveDuration, newStartMin));
         drag.moveCurrentStartMin = newStartMin;
@@ -710,6 +743,9 @@ export default function ShortTermCalendar() {
   const handleDragEnd = (e) => {
     document.removeEventListener('mousemove', stableDragMove);
     document.removeEventListener('mouseup', stableDragEnd);
+    document.removeEventListener('touchmove', stableTouchMove);
+    document.removeEventListener('touchend', stableTouchEnd);
+    document.removeEventListener('touchcancel', stableTouchEnd);
     const drag = dragRef.current;
     document.body.style.cursor = '';
     document.body.style.userSelect = '';
@@ -721,7 +757,8 @@ export default function ShortTermCalendar() {
     if (drag.type === 'create') {
       if (!drag.active) {
         // Below threshold — treat as click → open modal with 1-hour default
-        const minutes = snapTo5(yToMinutes(e.clientY, drag.daySlotEl));
+        const { clientY } = getEventXY(e);
+        const minutes = snapTo5(yToMinutes(clientY, drag.daySlotEl));
         const endMinutes = Math.min(1439, minutes + 60);
         openCreateModal(drag.date, minutesToTimeStr(minutes), minutesToTimeStr(endMinutes));
       } else {
@@ -870,6 +907,128 @@ export default function ShortTermCalendar() {
 
     document.addEventListener('mousemove', stableDragMove);
     document.addEventListener('mouseup', stableDragEnd);
+  };
+
+  // =========================================================
+  // Touch handlers — mirror mouse handlers for mobile/tablet
+  // =========================================================
+
+  // Touch on empty day slot → tap-to-create (no drag-to-create on touch to avoid scroll conflict)
+  const handleDaySlotsTouchStart = (date, e) => {
+    if (e.touches.length !== 1) return;
+    if (e.target.closest('.calendar-task')) return;
+    const touch = e.touches[0];
+    touchTapRef.current = {
+      startX: touch.clientX,
+      startY: touch.clientY,
+      date,
+      daySlotEl: e.currentTarget,
+    };
+  };
+
+  const handleDaySlotsTouchEnd = (e) => {
+    const tap = touchTapRef.current;
+    if (!tap.daySlotEl) return;
+    if (e.target.closest('.calendar-task')) {
+      touchTapRef.current = { startX: 0, startY: 0, date: null, daySlotEl: null };
+      return;
+    }
+
+    const touch = e.changedTouches[0];
+    const dx = touch.clientX - tap.startX;
+    const dy = touch.clientY - tap.startY;
+
+    // If finger didn't move much, treat as tap → open create modal
+    if (Math.sqrt(dx * dx + dy * dy) < 15) {
+      e.preventDefault(); // prevent synthetic click
+      const minutes = snapTo5(yToMinutes(touch.clientY, tap.daySlotEl));
+      const endMinutes = Math.min(1439, minutes + 60);
+      openCreateModal(tap.date, minutesToTimeStr(minutes), minutesToTimeStr(endMinutes));
+    }
+
+    touchTapRef.current = { startX: 0, startY: 0, date: null, daySlotEl: null };
+  };
+
+  // Touch on resize handle → drag-to-resize
+  const handleResizeTouchStart = (task, e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (e.touches.length !== 1) return;
+    const touch = e.touches[0];
+    const taskEl = e.currentTarget.closest('.calendar-task');
+    const daySlotEl = taskEl.closest('.day-slots');
+    const [sH, sM] = task.startTime.split(':').map(Number);
+    const [eH, eM] = task.endTime.split(':').map(Number);
+    dragRef.current = {
+      ...dragRef.current,
+      active: false,
+      type: 'resize',
+      startY: touch.clientY,
+      taskId: task._isVirtual ? task._parentId : task.id,
+      taskStartMinutes: sH * 60 + sM,
+      currentMinutes: eH * 60 + eM,
+      originalEndMinutes: eH * 60 + eM,
+      daySlotEl,
+      taskEl,
+      ghostEl: null,
+      tooltipEl: null,
+      isTouch: true,
+    };
+    document.addEventListener('touchmove', stableTouchMove, { passive: false });
+    document.addEventListener('touchend', stableTouchEnd);
+    document.addEventListener('touchcancel', stableTouchEnd);
+  };
+
+  // Touch on task body → drag-to-move
+  const handleMoveTouchStart = (task, e) => {
+    if (e.target.closest('.resize-handle')) return;
+    if (e.target.closest('.routine-task-check')) return;
+    if (e.touches.length !== 1) return;
+    if (task._segment === 'continuation') return;
+
+    e.stopPropagation();
+
+    const touch = e.touches[0];
+    const taskEl = e.currentTarget;
+    const daySlotEl = taskEl.closest('.day-slots');
+    const timeGridEl = taskEl.closest('.time-grid');
+    const dayColumnEl = taskEl.closest('.day-column');
+    const dateStr = dayColumnEl?.getAttribute('data-date');
+    const taskDate = dateStr ? parseISO(dateStr) : new Date();
+
+    const [sH, sM] = task.startTime.split(':').map(Number);
+    const [eH, eM] = task.endTime.split(':').map(Number);
+    const startMin = sH * 60 + sM;
+    const endMin = eH * 60 + eM;
+    const duration = endMin - startMin;
+
+    const cursorMinutes = yToMinutes(touch.clientY, daySlotEl);
+    const grabOffset = Math.max(0, cursorMinutes - startMin);
+
+    dragRef.current = {
+      ...dragRef.current,
+      active: false,
+      type: 'move',
+      startY: touch.clientY,
+      startX: touch.clientX,
+      daySlotEl,
+      ghostEl: null,
+      tooltipEl: null,
+      taskId: task._isVirtual ? task._parentId : task.id,
+      moveTask: task,
+      moveDuration: duration,
+      moveOriginalDate: taskDate,
+      moveGrabOffsetMin: grabOffset,
+      moveCurrentDate: taskDate,
+      moveCurrentStartMin: startMin,
+      moveTaskEl: taskEl,
+      moveTimeGridEl: timeGridEl,
+      isTouch: true,
+    };
+
+    document.addEventListener('touchmove', stableTouchMove, { passive: false });
+    document.addEventListener('touchend', stableTouchEnd);
+    document.addEventListener('touchcancel', stableTouchEnd);
   };
 
   // Update current time every minute
@@ -1244,6 +1403,8 @@ export default function ShortTermCalendar() {
                 <div
                   className="day-slots"
                   onMouseDown={(e) => handleDaySlotsMouseDown(date, e)}
+                  onTouchStart={(e) => handleDaySlotsTouchStart(date, e)}
+                  onTouchEnd={(e) => handleDaySlotsTouchEnd(e)}
                   style={isHourFocus ? { position: 'relative' } : {}}
                 >
                   {/* Hour lines */}
@@ -1364,6 +1525,7 @@ export default function ShortTermCalendar() {
                         className={`calendar-task ${!customColor ? `priority-${task.priority}` : ''} type-${task.type} ${task.completed ? 'completed' : ''} ${isZoomedIn ? 'zoomed' : ''} ${isDeepZoom ? 'deep-zoom' : ''} ${isUltraZoom ? 'ultra-zoom' : ''} ${customColor ? 'custom-color' : ''} ${durationCls} ${compactMode ? 'compact' : ''} ${task._segment === 'start' ? 'segment-start' : ''} ${task._segment === 'continuation' ? 'segment-continuation' : ''}`}
                         style={colorStyle}
                         onMouseDown={(e) => handleMoveMouseDown(task, e)}
+                        onTouchStart={(e) => handleMoveTouchStart(task, e)}
                         onClick={(e) => handleTaskClick(task, e)}
                         onDoubleClick={(e) => handleTaskDoubleClick(task, e)}
                         title={`${task.title}\n${task.startTime} - ${task.endTime}${task.description ? '\n' + task.description : ''}${view === 'day' ? '\nDouble-click to zoom in' : ''}`}
@@ -1429,6 +1591,7 @@ export default function ShortTermCalendar() {
                           <div
                             className="resize-handle"
                             onMouseDown={(e) => handleResizeMouseDown(task, e)}
+                            onTouchStart={(e) => handleResizeTouchStart(task, e)}
                           />
                         )}
                       </div>

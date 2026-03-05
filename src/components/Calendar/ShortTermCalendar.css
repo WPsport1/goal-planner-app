@@ -1736,6 +1736,29 @@
   background: rgba(255, 255, 255, 0.5);
 }
 
+/* Touch support — prevent scroll when interacting with tasks/handles */
+.calendar-task {
+  touch-action: none;
+}
+
+.resize-handle {
+  touch-action: none;
+}
+
+/* Touch devices: larger resize handle target, always-visible indicator */
+@media (pointer: coarse) {
+  .resize-handle {
+    height: 24px;
+    bottom: -8px;
+  }
+
+  .resize-handle::after {
+    opacity: 0.5;
+    height: 4px;
+    width: 32px;
+  }
+}
+
 /* =============================================
    Drag-active state — cursor + suppress hover effects
    ============================================= */
