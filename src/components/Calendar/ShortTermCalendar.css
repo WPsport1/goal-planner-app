@@ -797,6 +797,27 @@
   color: #fff;
 }
 
+/* Duplicate button in event modal footer */
+.event-modal-footer .duplicate-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.85rem;
+  background: transparent;
+  border: 1px solid var(--text-secondary);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.event-modal-footer .duplicate-btn:hover {
+  background: var(--text-secondary);
+  color: var(--bg-primary);
+}
+
 /* ========================================
    Hour-Focus Mode
    ======================================== */

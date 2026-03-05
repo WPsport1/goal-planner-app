@@ -44,6 +44,7 @@ import {
   Search,
   CalendarPlus,
   Download,
+  Copy,
 } from 'lucide-react';
 import { downloadICS, generateGoogleCalendarURL } from '../../utils/calendarExport';
 import './ShortTermCalendar.css';
@@ -1295,6 +1296,37 @@ export default function ShortTermCalendar() {
     }
   };
 
+  // Duplicate event — copies all data with a fresh ID, strips recurrence
+  const handleDuplicateEvent = async () => {
+    if (!editingTask) return;
+
+    // Copy everything except id, createdAt, completed state, and recurrence
+    const duplicateData = {
+      title: editingTask.title,
+      description: editingTask.description || '',
+      type: editingTask.type || 'task',
+      priority: editingTask.priority || 'medium',
+      color: editingTask.color || 'default',
+      scheduledDate: editingTask.scheduledDate,
+      startTime: editingTask.startTime,
+      endTime: editingTask.endTime,
+      recurrence: 'none',         // standalone copy, not linked
+      weeklyDays: null,
+      customRecurrence: null,
+      reminder: editingTask.reminder || false,
+      reminderMinutes: editingTask.reminderMinutes || 15,
+      linkedGoalId: editingTask.linkedGoalId || null,
+    };
+
+    await addTask(duplicateData);
+
+    setSaveConfirmation('Event duplicated!');
+    setTimeout(() => setSaveConfirmation(null), 2500);
+
+    setShowEventModal(false);
+    setEditingTask(null);
+  };
+
   // ── Calendar Export Handlers ──────────────
   const handleCalendarExport = (task, e) => {
     e.stopPropagation();
@@ -2063,6 +2095,10 @@ export default function ShortTermCalendar() {
                 <button className="cal-export-btn" onClick={(e) => handleCalendarExport(editingTask, e)} title="Add to calendar app">
                   <CalendarPlus size={16} />
                   Add to Cal
+                </button>
+                <button className="duplicate-btn" onClick={handleDuplicateEvent} title="Duplicate this event (same day/time, no recurrence)">
+                  <Copy size={16} />
+                  Duplicate
                 </button>
               </>
             )}
