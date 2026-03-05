@@ -172,10 +172,13 @@ export function AppProvider({ children }) {
   const [showWeeklyPlanning, setShowWeeklyPlanning] = useState(false);
   const [weeklyPlanningData, setWeeklyPlanningData] = useState(null);
 
+  // Data Management state
+  const [showDataManagement, setShowDataManagement] = useState(false);
+
   // Load data on mount — localStorage is ALWAYS the source of truth.
   // Supabase cloud sync is a background enhancement, never blocks or overwrites local data.
   useEffect(() => {
-    const loadData = () => {
+    const loadData = async () => {
       console.log('[AppContext] loadData starting — localStorage-first mode');
       setIsLoading(true);
       setSyncError(null);
@@ -220,6 +223,93 @@ export function AppProvider({ children }) {
         dataLoadedRef.current = true;
         setIsLoading(false);
         console.log('[AppContext] loadData complete, dataLoadedRef=true');
+      }
+
+      // =============================================
+      // STEP 2: Cloud pull (non-blocking, fills gaps)
+      // Runs AFTER localStorage load, won't block UI
+      // =============================================
+      if (isConfigured && user) {
+        console.log('[CloudSync] Pulling cloud data to fill gaps...');
+        try {
+          const goalsResult = await goalService.getAll(user.id);
+          if (goalsResult.data && goalsResult.data.length > 0) {
+            const cloudGoals = goalsResult.data.map(transformGoalFromDB);
+            setGoals(prev => {
+              if (prev.length === 0) {
+                safeLocalSet('goals', cloudGoals);
+                return cloudGoals;
+              }
+              const mergeMap = new Map();
+              prev.forEach(g => mergeMap.set(g.id, g));
+              cloudGoals.forEach(g => { if (!mergeMap.has(g.id)) mergeMap.set(g.id, g); });
+              const merged = Array.from(mergeMap.values());
+              safeLocalSet('goals', merged);
+              return merged;
+            });
+          }
+
+          const tasksResult = await taskService.getAll(user.id);
+          if (tasksResult.data && tasksResult.data.length > 0) {
+            const cloudTasks = tasksResult.data.map(transformTaskFromDB);
+            setTasks(prev => {
+              if (prev.length === 0) {
+                safeLocalSet('tasks', cloudTasks);
+                return cloudTasks;
+              }
+              const mergeMap = new Map();
+              prev.forEach(t => mergeMap.set(t.id, t));
+              cloudTasks.forEach(t => { if (!mergeMap.has(t.id)) mergeMap.set(t.id, t); });
+              const merged = Array.from(mergeMap.values());
+              safeLocalSet('tasks', merged);
+              return merged;
+            });
+          }
+
+          const reflResult = await reflectionService.getAll(user.id);
+          if (reflResult.data && reflResult.data.length > 0) {
+            const cloudReflections = reflResult.data.map(transformReflectionFromDB);
+            setReflections(prev => {
+              const mergeMap = new Map();
+              prev.forEach(r => mergeMap.set(r.id, r));
+              cloudReflections.forEach(r => { if (!mergeMap.has(r.id)) mergeMap.set(r.id, r); });
+              const merged = Array.from(mergeMap.values());
+              safeLocalSet('reflections', merged);
+              return merged;
+            });
+          }
+
+          const journalResult = await journalService.getAll(user.id);
+          if (journalResult.data && journalResult.data.length > 0) {
+            const cloudJournal = journalResult.data.map(transformJournalFromDB);
+            setJournalEntries(prev => {
+              const mergeMap = new Map();
+              prev.forEach(e => mergeMap.set(e.id, e));
+              cloudJournal.forEach(e => { if (!mergeMap.has(e.id)) mergeMap.set(e.id, e); });
+              const merged = Array.from(mergeMap.values());
+              localStorage.setItem('journalEntries', JSON.stringify(merged));
+              return merged;
+            });
+          }
+
+          const routinesResult = await routineService.getAll(user.id);
+          if (routinesResult.data && routinesResult.data.length > 0) {
+            const cloudRoutines = {};
+            routinesResult.data.forEach(r => {
+              cloudRoutines[r.routine_key] = transformRoutineFromDB(r);
+            });
+            setRoutines(prev => {
+              const merged = { ...cloudRoutines, ...prev }; // local overrides cloud
+              localStorage.setItem('routines', JSON.stringify(merged));
+              return merged;
+            });
+          }
+
+          console.log('[CloudSync] Cloud pull complete');
+        } catch (err) {
+          console.error('[CloudSync] Pull failed (non-blocking):', err);
+          // Don't set syncError — this is a background operation
+        }
       }
     };
 
@@ -1227,6 +1317,319 @@ export function AppProvider({ children }) {
     return newTask;
   };
 
+  // ============================================
+  // MERGE HELPER — combines local + cloud arrays by ID
+  // ============================================
+  const mergeArrayById = (localArr, cloudArr) => {
+    const map = new Map();
+    localArr.forEach(item => map.set(item.id, item));
+    cloudArr.forEach(item => {
+      if (!map.has(item.id)) map.set(item.id, item);
+    });
+    return Array.from(map.values());
+  };
+
+  // ============================================
+  // DATA EXPORT — gather all data into JSON
+  // ============================================
+  const exportAllData = useCallback(() => {
+    return {
+      version: '1.0',
+      exportDate: new Date().toISOString(),
+      appVersion: 'v21-dataExportBackup',
+      data: {
+        goals,
+        tasks,
+        reflections,
+        routines,
+        journalEntries,
+        lifeScoreData,
+        weeklyPlanningData,
+        notificationSettings,
+        reminders,
+        morningRoutine,
+      }
+    };
+  }, [goals, tasks, reflections, routines, journalEntries, lifeScoreData, weeklyPlanningData, notificationSettings, reminders, morningRoutine]);
+
+  // ============================================
+  // DATA IMPORT — validate + restore from JSON
+  // ============================================
+  const importAllData = useCallback((importData) => {
+    const d = importData?.data;
+    if (!d || typeof d !== 'object') {
+      throw new Error('Invalid backup format — missing data object');
+    }
+
+    console.log('[Import] Restoring data from backup dated:', importData.exportDate);
+
+    if (Array.isArray(d.goals)) {
+      setGoals(d.goals);
+      safeLocalSet('goals', d.goals);
+    }
+    if (Array.isArray(d.tasks)) {
+      setTasks(d.tasks);
+      safeLocalSet('tasks', d.tasks);
+    }
+    if (Array.isArray(d.reflections)) {
+      setReflections(d.reflections);
+      safeLocalSet('reflections', d.reflections);
+    }
+    if (d.routines && typeof d.routines === 'object') {
+      setRoutines(d.routines);
+      localStorage.setItem('routines', JSON.stringify(d.routines));
+    }
+    if (Array.isArray(d.journalEntries)) {
+      setJournalEntries(d.journalEntries);
+      localStorage.setItem('journalEntries', JSON.stringify(d.journalEntries));
+    }
+    if (d.lifeScoreData !== undefined) {
+      setLifeScoreData(d.lifeScoreData);
+      localStorage.setItem('lifeScoreData', JSON.stringify(d.lifeScoreData));
+    }
+    if (d.weeklyPlanningData !== undefined) {
+      setWeeklyPlanningData(d.weeklyPlanningData);
+      localStorage.setItem('weeklyPlanningData', JSON.stringify(d.weeklyPlanningData));
+    }
+    if (d.notificationSettings) {
+      setNotificationSettings(d.notificationSettings);
+      localStorage.setItem('notificationSettings', JSON.stringify(d.notificationSettings));
+    }
+    if (d.reminders) {
+      setReminders(d.reminders);
+      localStorage.setItem('reminders', JSON.stringify(d.reminders));
+    }
+    if (d.morningRoutine) {
+      setMorningRoutine(d.morningRoutine);
+      localStorage.setItem('morningRoutine', JSON.stringify(d.morningRoutine));
+    }
+
+    console.log('[Import] Data restored successfully');
+  }, []);
+
+  // ============================================
+  // CLOUD SYNC — pull all data from Supabase
+  // ============================================
+  const syncFromCloud = useCallback(async () => {
+    if (!isConfigured || !user) {
+      throw new Error('Cloud sync not available — not authenticated');
+    }
+
+    console.log('[CloudSync] Starting full pull from cloud...');
+    setIsSyncing(true);
+    setSyncError(null);
+    const results = { pulled: 0, errors: [] };
+
+    try {
+      // Pull goals
+      const goalsResult = await goalService.getAll(user.id);
+      if (goalsResult.error) {
+        results.errors.push('Goals: ' + goalsResult.error);
+      } else if (goalsResult.data && goalsResult.data.length > 0) {
+        const cloudGoals = goalsResult.data.map(transformGoalFromDB);
+        const merged = mergeArrayById(goals, cloudGoals);
+        setGoals(merged);
+        safeLocalSet('goals', merged);
+        results.pulled += cloudGoals.length;
+      }
+
+      // Pull tasks
+      const tasksResult = await taskService.getAll(user.id);
+      if (tasksResult.error) {
+        results.errors.push('Tasks: ' + tasksResult.error);
+      } else if (tasksResult.data && tasksResult.data.length > 0) {
+        const cloudTasks = tasksResult.data.map(transformTaskFromDB);
+        const merged = mergeArrayById(tasks, cloudTasks);
+        setTasks(merged);
+        safeLocalSet('tasks', merged);
+        results.pulled += cloudTasks.length;
+      }
+
+      // Pull reflections
+      const reflResult = await reflectionService.getAll(user.id);
+      if (reflResult.error) {
+        results.errors.push('Reflections: ' + reflResult.error);
+      } else if (reflResult.data && reflResult.data.length > 0) {
+        const cloudReflections = reflResult.data.map(transformReflectionFromDB);
+        const merged = mergeArrayById(reflections, cloudReflections);
+        setReflections(merged);
+        safeLocalSet('reflections', merged);
+        results.pulled += cloudReflections.length;
+      }
+
+      // Pull journal entries
+      const journalResult = await journalService.getAll(user.id);
+      if (journalResult.error) {
+        results.errors.push('Journal: ' + journalResult.error);
+      } else if (journalResult.data && journalResult.data.length > 0) {
+        const cloudJournal = journalResult.data.map(transformJournalFromDB);
+        const merged = mergeArrayById(journalEntries, cloudJournal);
+        setJournalEntries(merged);
+        localStorage.setItem('journalEntries', JSON.stringify(merged));
+        results.pulled += cloudJournal.length;
+      }
+
+      // Pull routines
+      const routinesResult = await routineService.getAll(user.id);
+      if (routinesResult.error) {
+        results.errors.push('Routines: ' + routinesResult.error);
+      } else if (routinesResult.data && routinesResult.data.length > 0) {
+        const cloudRoutines = {};
+        routinesResult.data.forEach(r => {
+          cloudRoutines[r.routine_key] = transformRoutineFromDB(r);
+        });
+        const merged = { ...cloudRoutines, ...routines }; // local overrides cloud
+        setRoutines(merged);
+        localStorage.setItem('routines', JSON.stringify(merged));
+        results.pulled += routinesResult.data.length;
+      }
+
+      // Pull life scores
+      const lifeResult = await lifeScoreService.getAll(user.id);
+      if (lifeResult.error) {
+        results.errors.push('Life Scores: ' + lifeResult.error);
+      } else if (lifeResult.data && lifeResult.data.length > 0 && !lifeScoreData) {
+        const latestScore = transformLifeScoreFromDB(lifeResult.data[0]);
+        const cloudData = { current: latestScore, history: lifeResult.data.map(transformLifeScoreFromDB) };
+        setLifeScoreData(cloudData);
+        localStorage.setItem('lifeScoreData', JSON.stringify(cloudData));
+        results.pulled += lifeResult.data.length;
+      }
+
+      // Pull weekly plans
+      const weeklyResult = await weeklyPlanService.getAll(user.id);
+      if (weeklyResult.error) {
+        results.errors.push('Weekly Plans: ' + weeklyResult.error);
+      } else if (weeklyResult.data && weeklyResult.data.length > 0 && !weeklyPlanningData) {
+        const cloudPlans = weeklyResult.data.map(transformWeeklyPlanFromDB);
+        setWeeklyPlanningData(cloudPlans);
+        localStorage.setItem('weeklyPlanningData', JSON.stringify(cloudPlans));
+        results.pulled += cloudPlans.length;
+      }
+
+      console.log('[CloudSync] Pull complete. Items pulled:', results.pulled, 'Errors:', results.errors.length);
+    } catch (err) {
+      console.error('[CloudSync] Pull failed:', err);
+      setSyncError(err.message);
+      results.errors.push(err.message);
+    } finally {
+      setIsSyncing(false);
+    }
+
+    return results;
+  }, [isConfigured, user, goals, tasks, reflections, journalEntries, routines, lifeScoreData, weeklyPlanningData]);
+
+  // ============================================
+  // CLOUD SYNC — push all local data to Supabase
+  // ============================================
+  const pushAllToCloud = useCallback(async () => {
+    if (!isConfigured || !user) {
+      throw new Error('Cloud sync not available — not authenticated');
+    }
+
+    console.log('[CloudSync] Starting full push to cloud...');
+    setIsSyncing(true);
+    setSyncError(null);
+    const results = { pushed: 0, errors: [] };
+
+    try {
+      // Push goals
+      for (const goal of goals) {
+        try {
+          const dbGoal = transformGoalToDB(goal);
+          // Try update first, create if not found
+          const updateResult = await goalService.update(goal.id, dbGoal);
+          if (updateResult.error) {
+            const createResult = await goalService.create(dbGoal, user.id);
+            if (createResult.error) results.errors.push('Goal ' + goal.title + ': ' + createResult.error);
+            else results.pushed++;
+          } else {
+            results.pushed++;
+          }
+        } catch (err) {
+          results.errors.push('Goal ' + goal.title + ': ' + err.message);
+        }
+      }
+
+      // Push tasks
+      for (const task of tasks) {
+        try {
+          const dbTask = transformTaskToDB(task);
+          const updateResult = await taskService.update(task.id, dbTask);
+          if (updateResult.error) {
+            const createResult = await taskService.create(dbTask, user.id);
+            if (createResult.error) results.errors.push('Task ' + task.title + ': ' + createResult.error);
+            else results.pushed++;
+          } else {
+            results.pushed++;
+          }
+        } catch (err) {
+          results.errors.push('Task ' + task.title + ': ' + err.message);
+        }
+      }
+
+      // Push reflections
+      for (const refl of reflections) {
+        try {
+          const dbRefl = transformReflectionToDB(refl);
+          const updateResult = await reflectionService.update(refl.id, dbRefl);
+          if (updateResult.error) {
+            const createResult = await reflectionService.create(dbRefl, user.id);
+            if (createResult.error) results.errors.push('Reflection: ' + createResult.error);
+            else results.pushed++;
+          } else {
+            results.pushed++;
+          }
+        } catch (err) {
+          results.errors.push('Reflection: ' + err.message);
+        }
+      }
+
+      // Push journal entries
+      for (const entry of journalEntries) {
+        try {
+          const dbEntry = transformJournalToDB(entry);
+          const updateResult = await journalService.update(entry.id, dbEntry);
+          if (updateResult.error) {
+            const createResult = await journalService.create(dbEntry, user.id);
+            if (createResult.error) results.errors.push('Journal: ' + createResult.error);
+            else results.pushed++;
+          } else {
+            results.pushed++;
+          }
+        } catch (err) {
+          results.errors.push('Journal: ' + err.message);
+        }
+      }
+
+      // Push routines
+      for (const [key, routine] of Object.entries(routines)) {
+        try {
+          await routineService.upsert({
+            routineKey: key,
+            routineType: routine.type || 'morning',
+            dayOfWeek: routine.dayOfWeek,
+            weekVariant: routine.weekVariant,
+            items: routine.items || [],
+          }, user.id);
+          results.pushed++;
+        } catch (err) {
+          results.errors.push('Routine ' + key + ': ' + err.message);
+        }
+      }
+
+      console.log('[CloudSync] Push complete. Items pushed:', results.pushed, 'Errors:', results.errors.length);
+    } catch (err) {
+      console.error('[CloudSync] Push failed:', err);
+      setSyncError(err.message);
+      results.errors.push(err.message);
+    } finally {
+      setIsSyncing(false);
+    }
+
+    return results;
+  }, [isConfigured, user, goals, tasks, reflections, journalEntries, routines]);
+
   const value = {
     // State
     goals,
@@ -1341,6 +1744,14 @@ export function AppProvider({ children }) {
     toggleLeftFullscreen,
     toggleRightFullscreen,
     exitFullscreen,
+
+    // Data Management
+    showDataManagement,
+    setShowDataManagement,
+    exportAllData,
+    importAllData,
+    syncFromCloud,
+    pushAllToCloud,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

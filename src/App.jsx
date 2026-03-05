@@ -19,6 +19,7 @@ import NotificationToast from './components/NotificationToast/NotificationToast'
 import Journal from './components/Journal/Journal';
 import LifeScore from './components/LifeScore/LifeScore';
 import WeeklyPlanning from './components/WeeklyPlanning/WeeklyPlanning';
+import DataManagement from './components/DataManagement/DataManagement';
 import AuthPage from './components/Auth/AuthPage';
 import { Loader2 } from 'lucide-react';
 import './App.css';
@@ -48,7 +49,7 @@ function DebugBanner() {
       fontSize: '11px', fontFamily: 'monospace', display: 'flex',
       justifyContent: 'space-between', alignItems: 'center',
     }}>
-      <span>Mode: {mode} | Goals: {goals.length} | Tasks: {tasks.length} | Save: {saveOk} | Build: v20-weeklyAnalytics</span>
+      <span>Mode: {mode} | Goals: {goals.length} | Tasks: {tasks.length} | Save: {saveOk} | Build: v21-dataExportBackup</span>
       <button onClick={() => setDismissed(true)} style={{ background: 'none', border: 'none', color: '#0f0', cursor: 'pointer', fontSize: '11px' }}>dismiss</button>
     </div>
   );
@@ -80,6 +81,7 @@ function AppContent() {
       <Journal />
       <LifeScore />
       <WeeklyPlanning />
+      <DataManagement />
     </>
   );
 }

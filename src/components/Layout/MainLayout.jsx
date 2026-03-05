@@ -9,7 +9,7 @@ import {
   Minimize2,
   User,
   LogOut,
-  Settings,
+  HardDrive,
   Cloud,
   CloudOff,
   ChevronDown,
@@ -51,6 +51,7 @@ export default function MainLayout({ leftPanel, rightPanel }) {
     setShowJournal,
     setShowLifeScore,
     setShowWeeklyPlanning,
+    setShowDataManagement,
   } = useApp();
 
   const { user, signOut, isConfigured } = useAuth();
@@ -354,6 +355,12 @@ export default function MainLayout({ leftPanel, rightPanel }) {
                 <button className="user-menu-item" onClick={() => { setShowReflection(true); setShowUserMenu(false); }}>
                   <BookOpen size={16} />
                   <span>Daily Reflection</span>
+                </button>
+
+                {/* Data Management in Menu */}
+                <button className="user-menu-item" onClick={() => { setShowDataManagement(true); setShowUserMenu(false); }}>
+                  <HardDrive size={16} />
+                  <span>Data Management</span>
                 </button>
 
                 <div className="user-menu-divider" />
