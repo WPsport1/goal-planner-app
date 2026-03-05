@@ -704,6 +704,99 @@
   filter: drop-shadow(0 0 2px rgba(251, 191, 36, 0.4));
 }
 
+/* Calendar export icon — hidden until hover */
+.calendar-task .task-cal-export-icon {
+  opacity: 0;
+  flex-shrink: 0;
+  cursor: pointer;
+  transition: opacity 0.15s ease;
+  color: var(--text-secondary);
+}
+
+.calendar-task:hover .task-cal-export-icon {
+  opacity: 0.6;
+}
+
+.calendar-task .task-cal-export-icon:hover {
+  opacity: 1 !important;
+  color: var(--accent-primary);
+}
+
+/* Calendar export dropdown */
+.cal-export-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+}
+
+.cal-export-menu {
+  z-index: 1000;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: 10px;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.35);
+  min-width: 210px;
+  padding: 0.3rem 0;
+  overflow: hidden;
+  animation: fadeIn 0.15s ease;
+}
+
+.cal-export-menu .cal-export-header {
+  padding: 0.5rem 0.85rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-secondary);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.cal-export-menu button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.55rem 0.85rem;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.15s ease;
+  text-align: left;
+}
+
+.cal-export-menu button:hover {
+  background: var(--bg-tertiary);
+}
+
+.cal-export-menu .cal-export-divider {
+  height: 1px;
+  background: var(--border-primary);
+  margin: 0.25rem 0;
+}
+
+/* Calendar export button in event modal footer */
+.event-modal-footer .cal-export-btn {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.5rem 0.85rem;
+  background: transparent;
+  border: 1px solid var(--accent-primary);
+  border-radius: 6px;
+  color: var(--accent-primary);
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.event-modal-footer .cal-export-btn:hover {
+  background: var(--accent-primary);
+  color: #fff;
+}
+
 /* ========================================
    Hour-Focus Mode
    ======================================== */

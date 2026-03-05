@@ -42,7 +42,10 @@ import {
   Crosshair,
   Target,
   Search,
+  CalendarPlus,
+  Download,
 } from 'lucide-react';
+import { downloadICS, generateGoogleCalendarURL } from '../../utils/calendarExport';
 import './ShortTermCalendar.css';
 
 const viewOptions = [
@@ -268,6 +271,9 @@ export default function ShortTermCalendar() {
   const [showSearchBar, setShowSearchBar] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTypeFilters, setActiveTypeFilters] = useState([]);
+
+  // Calendar export dropdown
+  const [calExportMenu, setCalExportMenu] = useState(null); // { task, x, y }
 
   // Routine progress tracking for today (including recurring routines)
   const todayRoutineTasks = useMemo(() => {
@@ -1130,6 +1136,39 @@ export default function ShortTermCalendar() {
     }
   };
 
+  // ── Calendar Export Handlers ──────────────
+  const handleCalendarExport = (task, e) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const rect = e.currentTarget.getBoundingClientRect();
+    setCalExportMenu({
+      task,
+      x: rect.left,
+      y: rect.bottom + 4,
+    });
+  };
+
+  const handleDownloadICS = (exportMode) => {
+    if (!calExportMenu) return;
+    const { task } = calExportMenu;
+    const goalTitle = task.linkedGoalId && goalMap[task.linkedGoalId]
+      ? goalMap[task.linkedGoalId].title
+      : null;
+    downloadICS(task, { goalTitle, exportMode });
+    setCalExportMenu(null);
+  };
+
+  const handleOpenGoogleCal = (exportMode) => {
+    if (!calExportMenu) return;
+    const { task } = calExportMenu;
+    const goalTitle = task.linkedGoalId && goalMap[task.linkedGoalId]
+      ? goalMap[task.linkedGoalId].title
+      : null;
+    const url = generateGoogleCalendarURL(task, { goalTitle, exportMode });
+    window.open(url, '_blank');
+    setCalExportMenu(null);
+  };
+
   // Scroll to focused hour when hour-focus mode is active or focusHour changes
   useEffect(() => {
     if (isHourFocus && calendarRef.current) {
@@ -1369,6 +1408,12 @@ export default function ShortTermCalendar() {
                                 {task.recurrence && task.recurrence !== 'none' && (
                                   <Repeat size={isUltraZoom ? 18 : isDeepZoom ? 14 : isZoomedIn ? 12 : 10} className="task-recurrence-icon" />
                                 )}
+                                <CalendarPlus
+                                  size={isUltraZoom ? 18 : isDeepZoom ? 14 : isZoomedIn ? 12 : 10}
+                                  className="task-cal-export-icon"
+                                  title="Add to calendar"
+                                  onClick={(e) => handleCalendarExport(task, e)}
+                                />
                               </span>
                             </div>
                             {showTitle && (
@@ -1847,10 +1892,16 @@ export default function ShortTermCalendar() {
 
           <div className="event-modal-footer">
             {editingTask && (
-              <button className="delete-btn" onClick={handleDeleteEvent}>
-                <Trash2 size={16} />
-                Delete
-              </button>
+              <>
+                <button className="delete-btn" onClick={handleDeleteEvent}>
+                  <Trash2 size={16} />
+                  Delete
+                </button>
+                <button className="cal-export-btn" onClick={(e) => handleCalendarExport(editingTask, e)} title="Add to calendar app">
+                  <CalendarPlus size={16} />
+                  Add to Cal
+                </button>
+              </>
             )}
             <div className="footer-right">
               <button className="cancel-btn" onClick={() => setShowEventModal(false)}>
@@ -2154,6 +2205,44 @@ export default function ShortTermCalendar() {
 
       {/* Event Modal */}
       {renderEventModal()}
+
+      {/* Calendar Export Dropdown */}
+      {calExportMenu && (
+        <>
+          <div className="cal-export-backdrop" onClick={() => setCalExportMenu(null)} />
+          <div
+            className="cal-export-menu"
+            style={{
+              position: 'fixed',
+              left: Math.min(calExportMenu.x, window.innerWidth - 230),
+              top: Math.min(calExportMenu.y, window.innerHeight - 200),
+            }}
+          >
+            <div className="cal-export-header">Add to Calendar</div>
+            <button onClick={() => handleDownloadICS('single')}>
+              <Download size={14} />
+              <span>Download .ics</span>
+            </button>
+            {calExportMenu.task.recurrence && calExportMenu.task.recurrence !== 'none' && (
+              <button onClick={() => handleDownloadICS('series')}>
+                <Repeat size={14} />
+                <span>Download .ics (series)</span>
+              </button>
+            )}
+            <div className="cal-export-divider" />
+            <button onClick={() => handleOpenGoogleCal('single')}>
+              <CalendarPlus size={14} />
+              <span>Google Calendar</span>
+            </button>
+            {calExportMenu.task.recurrence && calExportMenu.task.recurrence !== 'none' && (
+              <button onClick={() => handleOpenGoogleCal('series')}>
+                <Repeat size={14} />
+                <span>Google Calendar (series)</span>
+              </button>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

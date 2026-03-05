@@ -49,7 +49,7 @@ function DebugBanner() {
       fontSize: '11px', fontFamily: 'monospace', display: 'flex',
       justifyContent: 'space-between', alignItems: 'center',
     }}>
-      <span>Mode: {mode} | Goals: {goals.length} | Tasks: {tasks.length} | Save: {saveOk} | Build: v21-dataExportBackup</span>
+      <span>Mode: {mode} | Goals: {goals.length} | Tasks: {tasks.length} | Save: {saveOk} | Build: v22-calendarExport</span>
       <button onClick={() => setDismissed(true)} style={{ background: 'none', border: 'none', color: '#0f0', cursor: 'pointer', fontSize: '11px' }}>dismiss</button>
     </div>
   );
