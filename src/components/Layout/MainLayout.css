@@ -688,3 +688,66 @@
     padding: 0.5rem;
   }
 }
+
+/* =============================================
+   Auth Modal Overlay
+   ============================================= */
+.auth-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  backdrop-filter: blur(4px);
+}
+
+.auth-modal-container {
+  position: relative;
+  max-width: 480px;
+  width: 90%;
+  max-height: 90vh;
+  overflow-y: auto;
+  border-radius: 16px;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.4);
+}
+
+.auth-modal-container .auth-page {
+  min-height: unset;
+}
+
+.auth-modal-close {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  z-index: 10;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: none;
+  background: var(--bg-tertiary, rgba(0, 0, 0, 0.3));
+  color: var(--text-secondary, #aaa);
+  font-size: 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+}
+
+.auth-modal-close:hover {
+  background: var(--bg-secondary, rgba(0, 0, 0, 0.5));
+  color: var(--text-primary, #fff);
+}
+
+/* Sign In button highlight in user menu */
+.user-menu-item.sign-in-btn {
+  color: var(--accent-primary, #6366f1);
+  font-weight: 600;
+}
+
+.user-menu-item.sign-in-btn:hover {
+  background: var(--accent-primary, #6366f1);
+  color: #fff;
+}

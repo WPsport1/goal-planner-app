@@ -8,6 +8,7 @@ import {
   Maximize2,
   Minimize2,
   User,
+  LogIn,
   LogOut,
   HardDrive,
   Cloud,
@@ -30,6 +31,7 @@ import {
   Activity,
   CalendarCheck,
 } from 'lucide-react';
+import AuthPage from '../Auth/AuthPage';
 import './MainLayout.css';
 
 export default function MainLayout({ leftPanel, rightPanel }) {
@@ -57,9 +59,15 @@ export default function MainLayout({ leftPanel, rightPanel }) {
   const { user, signOut, isConfigured } = useAuth();
   const { theme, toggleTheme, isDark } = useTheme();
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [showAuthModal, setShowAuthModal] = useState(false);
   const [mobilePanel, setMobilePanel] = useState('list'); // 'list' or 'calendar'
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const menuRef = useRef(null);
+
+  // Auto-close auth modal when user signs in
+  useEffect(() => {
+    if (user && showAuthModal) setShowAuthModal(false);
+  }, [user]);
 
   // Track screen size
   useEffect(() => {
@@ -393,10 +401,17 @@ export default function MainLayout({ leftPanel, rightPanel }) {
 
                 <div className="user-menu-divider" />
 
-                <button className="user-menu-item" onClick={handleSignOut}>
-                  <LogOut size={16} />
-                  <span>Sign Out</span>
-                </button>
+                {user ? (
+                  <button className="user-menu-item" onClick={handleSignOut}>
+                    <LogOut size={16} />
+                    <span>Sign Out</span>
+                  </button>
+                ) : (
+                  <button className="user-menu-item sign-in-btn" onClick={() => { setShowAuthModal(true); setShowUserMenu(false); }}>
+                    <LogIn size={16} />
+                    <span>{isConfigured ? 'Sign In / Sign Up' : 'Enable Cloud Sync'}</span>
+                  </button>
+                )}
               </div>
             )}
           </div>
@@ -472,6 +487,16 @@ export default function MainLayout({ leftPanel, rightPanel }) {
           </section>
         )}
       </main>
+
+      {/* Auth Modal Overlay */}
+      {showAuthModal && (
+        <div className="auth-modal-overlay" onClick={(e) => { if (e.target === e.currentTarget) setShowAuthModal(false); }}>
+          <div className="auth-modal-container">
+            <button className="auth-modal-close" onClick={() => setShowAuthModal(false)}>✕</button>
+            <AuthPage />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
