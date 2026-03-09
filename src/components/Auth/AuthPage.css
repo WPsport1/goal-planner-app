@@ -120,6 +120,66 @@
   color: #4ade80;
 }
 
+.auth-message.info {
+  background: rgba(59, 130, 246, 0.1);
+  border: 1px solid rgba(59, 130, 246, 0.3);
+  color: #60a5fa;
+}
+
+/* Email Confirmation Notice */
+.auth-confirmation-notice {
+  display: flex;
+  gap: 0.75rem;
+  padding: 1rem;
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 10px;
+  margin-bottom: 1.25rem;
+  color: #fbbf24;
+}
+
+.auth-confirmation-notice svg:first-child {
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.auth-confirmation-notice strong {
+  display: block;
+  font-size: 0.9rem;
+  margin-bottom: 0.25rem;
+  color: #fcd34d;
+}
+
+.auth-confirmation-notice p {
+  font-size: 0.8rem;
+  margin: 0 0 0.5rem 0;
+  color: #d4a32a;
+  line-height: 1.4;
+}
+
+.resend-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.375rem;
+  background: rgba(251, 191, 36, 0.15);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  border-radius: 6px;
+  padding: 0.375rem 0.75rem;
+  color: #fbbf24;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.resend-btn:hover:not(:disabled) {
+  background: rgba(251, 191, 36, 0.25);
+}
+
+.resend-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* Auth Form */
 .auth-form {
   display: flex;

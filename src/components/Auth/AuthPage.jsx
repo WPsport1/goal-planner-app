@@ -12,11 +12,12 @@ import {
   Loader2,
   ArrowRight,
   CloudOff,
+  RefreshCw,
 } from 'lucide-react';
 import './AuthPage.css';
 
 export default function AuthPage() {
-  const { signIn, signUp, resetPassword, loading, error, clearError, isConfigured } = useAuth();
+  const { signIn, signUp, resetPassword, resendConfirmation, loading, error, clearError, isConfigured } = useAuth();
 
   const [mode, setMode] = useState('login'); // login, signup, forgot
   const [showPassword, setShowPassword] = useState(false);
@@ -28,6 +29,8 @@ export default function AuthPage() {
   });
   const [message, setMessage] = useState(null);
   const [formErrors, setFormErrors] = useState({});
+  const [needsConfirmation, setNeedsConfirmation] = useState(false);
+  const [resending, setResending] = useState(false);
 
   const validateForm = () => {
     const errors = {};
@@ -72,9 +75,23 @@ export default function AuthPage() {
     setMessage(null);
   };
 
+  const handleResendConfirmation = async () => {
+    if (!formData.email) {
+      setFormErrors({ email: 'Enter your email to resend confirmation' });
+      return;
+    }
+    setResending(true);
+    const result = await resendConfirmation(formData.email);
+    setResending(false);
+    if (result.success) {
+      setMessage({ type: 'success', text: result.message });
+    }
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setMessage(null);
+    setNeedsConfirmation(false);
 
     if (!validateForm()) return;
 
@@ -84,7 +101,10 @@ export default function AuthPage() {
       case 'login':
         result = await signIn(formData.email, formData.password);
         if (!result.success) {
-          // Error is handled by AuthContext
+          // Check if the error is about email confirmation
+          if (result.error && result.error.toLowerCase().includes('not confirmed')) {
+            setNeedsConfirmation(true);
+          }
         }
         break;
 
@@ -93,10 +113,16 @@ export default function AuthPage() {
         if (result.success) {
           if (result.requiresConfirmation) {
             setMessage({
-              type: 'success',
+              type: 'info',
               text: result.message,
             });
+            setNeedsConfirmation(true);
             setMode('login');
+          } else if (result.autoSignedIn) {
+            setMessage({
+              type: 'success',
+              text: 'Account created and signed in!',
+            });
           }
         }
         break;
@@ -118,6 +144,7 @@ export default function AuthPage() {
     setMode(newMode);
     setFormErrors({});
     setMessage(null);
+    setNeedsConfirmation(false);
     clearError();
     // Keep email when switching modes
     setFormData((prev) => ({
@@ -191,12 +218,41 @@ VITE_SUPABASE_ANON_KEY=your-key`}
         {/* Messages */}
         {(error || message) && (
           <div className={`auth-message ${message?.type || 'error'}`}>
-            {message?.type === 'success' ? (
+            {message?.type === 'success' || message?.type === 'info' ? (
               <CheckCircle size={18} />
             ) : (
               <AlertCircle size={18} />
             )}
             <span>{message?.text || error}</span>
+          </div>
+        )}
+
+        {/* Email Confirmation Notice */}
+        {needsConfirmation && (
+          <div className="auth-confirmation-notice">
+            <Mail size={20} />
+            <div>
+              <strong>Email confirmation required</strong>
+              <p>Check your inbox for a confirmation link. If you don't see it, check spam or click below to resend.</p>
+              <button
+                type="button"
+                className="resend-btn"
+                onClick={handleResendConfirmation}
+                disabled={resending}
+              >
+                {resending ? (
+                  <>
+                    <Loader2 size={14} className="spinner" />
+                    Sending...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw size={14} />
+                    Resend confirmation email
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         )}
 
