@@ -16,6 +16,8 @@ import {
   Circle,
   Calendar,
   Link2,
+  Tag,
+  TrendingUp,
 } from 'lucide-react';
 import { format } from 'date-fns';
 import './GoalList.css';
@@ -321,44 +323,40 @@ export default function GoalList() {
                   )}
 
                   <div className="goal-meta">
-                    <span className="goal-category">{goal.category}</span>
-                    <span className="goal-date">
-                      Target: {new Date(goal.targetDate).toLocaleDateString()}
+                    <span className="goal-category">
+                      <Tag size={12} />
+                      {goal.category}
                     </span>
+                    <span className="goal-date">
+                      <Calendar size={12} />
+                      {new Date(goal.targetDate).toLocaleDateString()}
+                    </span>
+                    <span className={`goal-progress-inline ${goal.progress >= 100 ? 'complete' : goal.progress > 0 ? 'active' : ''}`}>
+                      <TrendingUp size={12} />
+                      {goal.progress}%
+                    </span>
+                    {linkedTasks.length > 0 && (
+                      <span className="goal-tasks-inline">
+                        <Link2 size={12} />
+                        {completedTasks}/{linkedTasks.length} tasks
+                      </span>
+                    )}
                   </div>
+                </div>
 
-                  <div className="goal-progress">
-                    <div className="progress-bar">
-                      <div
-                        className="progress-fill"
-                        style={{ width: `${goal.progress}%` }}
-                      />
-                    </div>
-                    <span className="progress-text">{goal.progress}%</span>
-                  </div>
-
-                  {/* Linked Tasks Summary */}
+                <div className="goal-actions">
                   {linkedTasks.length > 0 && (
-                    <div
-                      className="goal-tasks-summary"
+                    <button
+                      className="action-btn expand"
                       onClick={(e) => {
                         e.stopPropagation();
                         toggleGoalTasks(goal.id);
                       }}
+                      title={isTasksExpanded ? 'Hide tasks' : 'Show tasks'}
                     >
-                      <Link2 size={14} />
-                      <span>
-                        {completedTasks}/{linkedTasks.length} tasks completed
-                      </span>
-                      <ChevronRight
-                        size={14}
-                        className={`expand-icon ${isTasksExpanded ? 'rotated' : ''}`}
-                      />
-                    </div>
+                      <ChevronRight size={14} className={`expand-chevron ${isTasksExpanded ? 'rotated' : ''}`} />
+                    </button>
                   )}
-                </div>
-
-                <div className="goal-actions">
                   <button
                     className="action-btn tasks"
                     onClick={(e) => {
@@ -421,7 +419,7 @@ export default function GoalList() {
                 {/* Expanded Tasks List */}
                 {isTasksExpanded && linkedTasks.length > 0 && (
                   <div className="goal-linked-tasks" onClick={(e) => e.stopPropagation()}>
-                    {linkedTasks.slice(0, 5).map((task) => (
+                    {linkedTasks.map((task) => (
                       <div
                         key={task.id}
                         className={`linked-task-item ${task.completed ? 'completed' : ''}`}
@@ -440,14 +438,6 @@ export default function GoalList() {
                         )}
                       </div>
                     ))}
-                    {linkedTasks.length > 5 && (
-                      <button
-                        className="view-all-tasks"
-                        onClick={() => goToTasksForGoal(goal.id)}
-                      >
-                        View all {linkedTasks.length} tasks →
-                      </button>
-                    )}
                   </div>
                 )}
               </div>
