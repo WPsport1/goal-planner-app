@@ -309,74 +309,82 @@ export default function MainLayout({ leftPanel, rightPanel }) {
                   </div>
                 </div>
 
+                {/* Sign In / Sign Out — always visible at top */}
+                <div className="user-menu-divider" />
+                {user ? (
+                  <button className="user-menu-item" onClick={handleSignOut}>
+                    <LogOut size={16} />
+                    <span>Sign Out</span>
+                  </button>
+                ) : (
+                  <button className="user-menu-item sign-in-btn" onClick={() => { setShowAuthModal(true); setShowUserMenu(false); }}>
+                    <LogIn size={16} />
+                    <span>{isConfigured ? 'Sign In / Sign Up' : 'Enable Cloud Sync'}</span>
+                  </button>
+                )}
+
                 <div className="user-menu-divider" />
 
-                {/* Weekly Summary in Menu */}
+                {/* Theme Toggle */}
+                <button className="user-menu-item" onClick={toggleTheme}>
+                  {isDark ? <Sun size={16} /> : <Moon size={16} />}
+                  <span>{isDark ? 'Light Mode' : 'Dark Mode'}</span>
+                </button>
+
+                <div className="user-menu-divider" />
+
+                {/* Features */}
                 <button className="user-menu-item" onClick={() => { setShowWeeklySummary(true); setShowUserMenu(false); }}>
                   <BarChart3 size={16} />
                   <span>Weekly Summary</span>
                 </button>
 
-                {/* Achievements in Menu */}
                 <button className="user-menu-item" onClick={() => { setShowAchievements(true); setShowUserMenu(false); }}>
                   <Trophy size={16} />
                   <span>Achievements</span>
                 </button>
 
-                {/* Morning Routine in Menu */}
                 <button className="user-menu-item" onClick={() => { setShowMorningRoutine(true); setShowUserMenu(false); }}>
                   <Sunrise size={16} />
                   <span>Morning Routine</span>
                 </button>
 
-                {/* Nighttime Routine in Menu */}
                 <button className="user-menu-item" onClick={() => { setShowNightRoutine(true); setShowUserMenu(false); }}>
                   <Sunset size={16} />
                   <span>Nighttime Routine</span>
                 </button>
 
-                {/* Journal in Menu */}
                 <button className="user-menu-item" onClick={() => { setShowJournal(true); setShowUserMenu(false); }}>
                   <PenLine size={16} />
                   <span>Journal</span>
                 </button>
 
-                {/* Life Score in Menu */}
                 <button className="user-menu-item" onClick={() => { setShowLifeScore(true); setShowUserMenu(false); }}>
                   <Activity size={16} />
                   <span>Life Score</span>
                 </button>
 
-                {/* Weekly Planning in Menu */}
                 <button className="user-menu-item" onClick={() => { setShowWeeklyPlanning(true); setShowUserMenu(false); }}>
                   <CalendarCheck size={16} />
                   <span>Weekly Planning</span>
                 </button>
 
-                {/* Notification Center in Menu */}
                 <button className="user-menu-item" onClick={() => { setShowNotificationCenter(true); setShowUserMenu(false); }}>
                   <BellRing size={16} />
                   <span>Notifications</span>
                 </button>
 
-                {/* Daily Reflection in Menu */}
                 <button className="user-menu-item" onClick={() => { setShowReflection(true); setShowUserMenu(false); }}>
                   <BookOpen size={16} />
                   <span>Daily Reflection</span>
                 </button>
 
-                {/* Data Management in Menu */}
+                <div className="user-menu-divider" />
+
+                {/* Data & Settings */}
                 <button className="user-menu-item" onClick={() => { setShowDataManagement(true); setShowUserMenu(false); }}>
                   <HardDrive size={16} />
                   <span>Data Management</span>
-                </button>
-
-                <div className="user-menu-divider" />
-
-                {/* Theme Toggle in Menu */}
-                <button className="user-menu-item" onClick={toggleTheme}>
-                  {isDark ? <Sun size={16} /> : <Moon size={16} />}
-                  <span>{isDark ? 'Light Mode' : 'Dark Mode'}</span>
                 </button>
 
                 <div className="user-menu-divider" />
@@ -398,20 +406,6 @@ export default function MainLayout({ leftPanel, rightPanel }) {
                     </div>
                   </div>
                 </div>
-
-                <div className="user-menu-divider" />
-
-                {user ? (
-                  <button className="user-menu-item" onClick={handleSignOut}>
-                    <LogOut size={16} />
-                    <span>Sign Out</span>
-                  </button>
-                ) : (
-                  <button className="user-menu-item sign-in-btn" onClick={() => { setShowAuthModal(true); setShowUserMenu(false); }}>
-                    <LogIn size={16} />
-                    <span>{isConfigured ? 'Sign In / Sign Up' : 'Enable Cloud Sync'}</span>
-                  </button>
-                )}
               </div>
             )}
           </div>

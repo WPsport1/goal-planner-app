@@ -291,12 +291,29 @@
   top: calc(100% + 8px);
   right: 0;
   width: 280px;
+  max-height: calc(100vh - 70px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--bg-tertiary);
   border: 1px solid var(--border-primary);
   border-radius: 12px;
   box-shadow: var(--dropdown-shadow);
   z-index: 1000;
   animation: menuSlideIn 0.2s ease;
+}
+
+/* Thin scrollbar for user menu */
+.user-menu::-webkit-scrollbar {
+  width: 4px;
+}
+
+.user-menu::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.user-menu::-webkit-scrollbar-thumb {
+  background: var(--border-secondary, rgba(255, 255, 255, 0.15));
+  border-radius: 2px;
 }
 
 @keyframes menuSlideIn {
@@ -598,6 +615,13 @@
   grid-template-columns: 1fr;
 }
 
+/* Hide header action buttons on smaller screens — all features accessible from user menu */
+@media (max-width: 1100px) {
+  .header-action-btn {
+    display: none;
+  }
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .main-header {
@@ -644,6 +668,12 @@
   .user-menu {
     right: -0.5rem;
     width: 260px;
+    max-height: calc(100vh - 60px);
+  }
+
+  .user-menu-item {
+    padding: 0.75rem 1rem;
+    font-size: 0.85rem;
   }
 
   .panel-content {
@@ -686,6 +716,11 @@
 
   .panel-content {
     padding: 0.5rem;
+  }
+
+  .user-menu {
+    width: calc(100vw - 1rem);
+    right: -0.25rem;
   }
 }
 
