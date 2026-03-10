@@ -79,6 +79,8 @@ const TIME_SLOTS = generateTimeSlots();
 // Normal zoom: scrollable 24-hour view at various densities
 // Hour-focus: locks view to a small time window for maximum detail
 const ZOOM_LEVELS = [
+  { label: '⅓x',  hourHeight: 20,   hourFocus: false },  // Full day in ~480px
+  { label: '½x',   hourHeight: 30,   hourFocus: false },  // Full day in ~720px
   { label: '1x',   hourHeight: 60,   hourFocus: false },
   { label: '1.5x', hourHeight: 90,   hourFocus: false },
   { label: '2x',   hourHeight: 120,  hourFocus: false },
@@ -221,7 +223,7 @@ export default function ShortTermCalendar() {
   const timeIndicatorRef = useRef(null);
 
   // Zoom state (default to 2x for Day view so entries are readable)
-  const [zoomLevel, setZoomLevel] = useState(2);
+  const [zoomLevel, setZoomLevel] = useState(4);
   const [focusHour, setFocusHour] = useState(() => new Date().getHours()); // Which hour to focus on in hour-focus mode
   const isHourFocus = ZOOM_LEVELS[zoomLevel].hourFocus && view === 'day';
   const HOUR_HEIGHT = (view === 'day' || view === 'week') ? ZOOM_LEVELS[zoomLevel].hourHeight : 60;
@@ -238,7 +240,7 @@ export default function ShortTermCalendar() {
 
       // Get scroll position ratio before zoom to maintain position
       const scrollRatio = container.scrollTop / (container.scrollHeight - container.clientHeight || 1);
-      const maxLevel = view === 'week' ? 5 : ZOOM_LEVELS.length - 1;
+      const maxLevel = view === 'week' ? 7 : ZOOM_LEVELS.length - 1;
 
       setZoomLevel((prev) => {
         const next = e.deltaY < 0
@@ -1122,7 +1124,7 @@ export default function ShortTermCalendar() {
   // Like One Calendar / TickTick: event height is STRICTLY proportional to duration.
   // A 6-minute event = 1/10th of an hour. A 30-minute event = half an hour.
   // GAP_PX scales with zoom so events are visually separated at every level.
-  const GAP_PX = HOUR_HEIGHT >= 480 ? 3 : HOUR_HEIGHT >= 120 ? 2 : 1;
+  const GAP_PX = HOUR_HEIGHT >= 480 ? 3 : HOUR_HEIGHT >= 120 ? 2 : HOUR_HEIGHT <= 20 ? 0 : 1;
 
   const getTaskStyle = (task) => {
     if (!task.startTime || !task.endTime) return {};
@@ -1237,7 +1239,7 @@ export default function ShortTermCalendar() {
     if (!task.startTime || view !== 'day') return;
     const [sH] = task.startTime.split(':').map(Number);
     // Jump to a deep zoom level focused on this event's hour
-    const targetLevel = Math.max(zoomLevel, 6); // At least 12x
+    const targetLevel = Math.max(zoomLevel, 8); // At least 12x
     setZoomLevel(Math.min(targetLevel, ZOOM_LEVELS.length - 1));
     setFocusHour(sH);
   };
@@ -1383,20 +1385,27 @@ export default function ShortTermCalendar() {
       : Array.from({ length: 24 }, (_, i) => i);
 
     return (
-      <div className={`time-grid-container ${isHourFocus ? 'hour-focus-mode' : ''} ${dragState.active ? 'is-dragging' : ''} ${dragState.active && dragState.type === 'move' ? 'is-dragging-move' : ''}`} ref={calendarRef} style={isHourFocus ? { overflow: 'hidden' } : {}}>
+      <div className={`time-grid-container ${isHourFocus ? 'hour-focus-mode' : ''} ${HOUR_HEIGHT <= 30 ? 'micro-zoom' : HOUR_HEIGHT < 60 ? 'compact-zoom' : ''} ${dragState.active ? 'is-dragging' : ''} ${dragState.active && dragState.type === 'move' ? 'is-dragging-move' : ''}`} ref={calendarRef} style={isHourFocus ? { overflow: 'hidden' } : {}}>
         <div className={`time-grid ${isMultiDay ? 'multi-day' : 'single-day'}`} style={isHourFocus ? { minHeight: `${HOUR_HEIGHT * focusWindowHours}px`, position: 'relative' } : { minHeight: `${24 * HOUR_HEIGHT}px` }}>
           {/* Time labels column */}
           {showTimeColumn && (
             <div className="time-labels">
-              {hoursToRender.map((hour) => (
-                <div
-                  key={hour}
-                  className={`time-label ${isHourFocus && hour === focusHour ? 'focused' : ''}`}
-                  style={{ height: HOUR_HEIGHT }}
-                >
-                  {format(setHours(new Date(), hour), 'h a')}
-                </div>
-              ))}
+              {hoursToRender.map((hour) => {
+                // At micro zoom, only show every 2nd or 3rd label to prevent overlap
+                const showLabel = isHourFocus ? true
+                  : HOUR_HEIGHT <= 20 ? (hour % 3 === 0)
+                  : HOUR_HEIGHT <= 30 ? (hour % 2 === 0)
+                  : true;
+                return (
+                  <div
+                    key={hour}
+                    className={`time-label ${isHourFocus && hour === focusHour ? 'focused' : ''}`}
+                    style={{ height: HOUR_HEIGHT }}
+                  >
+                    {showLabel && format(setHours(new Date(), hour), 'h a')}
+                  </div>
+                );
+              })}
             </div>
           )}
 
@@ -1480,13 +1489,15 @@ export default function ShortTermCalendar() {
                             );
                           })}
                         </>
-                      ) : (
+                      ) : HOUR_HEIGHT >= 60 ? (
                         <>
                           <div className="quarter-line q1" />
                           <div className="quarter-line q2" />
                           <div className="quarter-line q3" />
                         </>
-                      )}
+                      ) : HOUR_HEIGHT >= 30 ? (
+                        <div className="quarter-line q2" />
+                      ) : null}
                     </div>
                   ))}
 
@@ -1529,6 +1540,8 @@ export default function ShortTermCalendar() {
                     const isZoomedIn = HOUR_HEIGHT >= 120;
                     const isDeepZoom = HOUR_HEIGHT >= 480;
                     const isUltraZoom = HOUR_HEIGHT >= 1200;
+                    const isMicroZoom = HOUR_HEIGHT <= 30;
+                    const isCompactZoom = HOUR_HEIGHT < 60;
                     const durationCls = getDurationClass(task);
                     const customColor = getEventColor(task);
                     // For custom colors: solid opaque background + darker left accent
@@ -1554,7 +1567,7 @@ export default function ShortTermCalendar() {
                     return (
                       <div
                         key={task.id}
-                        className={`calendar-task ${!customColor ? `priority-${task.priority}` : ''} type-${task.type} ${task.completed ? 'completed' : ''} ${isZoomedIn ? 'zoomed' : ''} ${isDeepZoom ? 'deep-zoom' : ''} ${isUltraZoom ? 'ultra-zoom' : ''} ${customColor ? 'custom-color' : ''} ${durationCls} ${compactMode ? 'compact' : ''} ${task._segment === 'start' ? 'segment-start' : ''} ${task._segment === 'continuation' ? 'segment-continuation' : ''}`}
+                        className={`calendar-task ${!customColor ? `priority-${task.priority}` : ''} type-${task.type} ${task.completed ? 'completed' : ''} ${isZoomedIn ? 'zoomed' : ''} ${isDeepZoom ? 'deep-zoom' : ''} ${isUltraZoom ? 'ultra-zoom' : ''} ${isMicroZoom ? 'micro-zoom' : isCompactZoom ? 'compact-zoom' : ''} ${customColor ? 'custom-color' : ''} ${durationCls} ${compactMode ? 'compact' : ''} ${task._segment === 'start' ? 'segment-start' : ''} ${task._segment === 'continuation' ? 'segment-continuation' : ''}`}
                         style={colorStyle}
                         onMouseDown={(e) => handleMoveMouseDown(task, e)}
                         onTouchStart={(e) => handleMoveTouchStart(task, e)}
@@ -2213,7 +2226,7 @@ export default function ShortTermCalendar() {
               <button
                 className="zoom-btn"
                 onClick={() => {
-                  const maxLevel = view === 'week' ? 5 : ZOOM_LEVELS.length - 1; // Week view limited to 8x
+                  const maxLevel = view === 'week' ? 7 : ZOOM_LEVELS.length - 1; // Week view limited to 8x
                   const newLevel = Math.min(maxLevel, zoomLevel + 1);
                   setZoomLevel(newLevel);
                   // When entering hour-focus, set focus to current hour
@@ -2221,7 +2234,7 @@ export default function ShortTermCalendar() {
                     setFocusHour(new Date().getHours());
                   }
                 }}
-                disabled={zoomLevel === (view === 'week' ? 5 : ZOOM_LEVELS.length - 1)}
+                disabled={zoomLevel === (view === 'week' ? 7 : ZOOM_LEVELS.length - 1)}
                 title="Zoom in"
               >
                 <ZoomIn size={14} />

@@ -691,6 +691,138 @@
   gap: 0.5rem;
 }
 
+/* Compact zoom — events at 30-59px/hour (½x and below 1x) */
+.calendar-task.compact-zoom {
+  padding: 0 0.2rem;
+  border-radius: 3px;
+  border-left-width: 3px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
+  gap: 0;
+}
+
+.calendar-task.compact-zoom .task-time {
+  font-size: 0.5rem;
+}
+
+.calendar-task.compact-zoom .task-title {
+  font-size: 0.55rem;
+  line-height: 1.05;
+}
+
+.calendar-task.compact-zoom .task-icons-right {
+  display: none;
+}
+
+.calendar-task.compact-zoom .task-top-bar {
+  gap: 0.15rem;
+}
+
+.calendar-task.compact-zoom .routine-task-check {
+  display: none;
+}
+
+/* Micro zoom — events at ≤30px/hour (⅓x) — ultra-compact colored bars */
+.calendar-task.micro-zoom {
+  padding: 0;
+  border-radius: 2px;
+  border-left-width: 2px;
+  box-shadow: 0 0 1px rgba(0, 0, 0, 0.3);
+  gap: 0;
+}
+
+.calendar-task.micro-zoom .task-compact-line {
+  gap: 0.1rem;
+  padding: 0 0.15rem;
+}
+
+.calendar-task.micro-zoom .task-compact-line .task-time,
+.calendar-task.micro-zoom .task-compact-line .task-title {
+  font-size: 0.4rem;
+  font-weight: 700;
+}
+
+.calendar-task.micro-zoom .task-top-bar {
+  gap: 0.1rem;
+  padding: 0 0.15rem;
+}
+
+.calendar-task.micro-zoom .task-time {
+  font-size: 0.4rem;
+}
+
+.calendar-task.micro-zoom .task-title {
+  font-size: 0.45rem;
+  line-height: 1;
+}
+
+.calendar-task.micro-zoom .task-icons-right {
+  display: none;
+}
+
+.calendar-task.micro-zoom .routine-task-check {
+  display: none;
+}
+
+.calendar-task.micro-zoom .task-description-preview {
+  display: none;
+}
+
+.calendar-task.micro-zoom .resize-handle {
+  display: none;
+}
+
+/* Micro zoom container — compact time labels and day headers */
+.time-grid-container.micro-zoom .time-label {
+  font-size: 0.45rem;
+  padding-right: 0.15rem;
+}
+
+.time-grid-container.micro-zoom .time-labels {
+  width: 35px;
+  min-width: 35px;
+}
+
+.time-grid-container.micro-zoom .day-column {
+  min-width: 40px;
+}
+
+.time-grid-container.micro-zoom .day-header {
+  padding: 0.2rem 0.15rem;
+}
+
+.time-grid-container.micro-zoom .day-header .day-name {
+  font-size: 0.5rem;
+}
+
+.time-grid-container.micro-zoom .day-header .day-number {
+  font-size: 0.7rem;
+  width: 22px;
+  height: 22px;
+}
+
+/* Compact zoom container — slightly smaller labels */
+.time-grid-container.compact-zoom .time-label {
+  font-size: 0.55rem;
+}
+
+.time-grid-container.compact-zoom .day-column {
+  min-width: 80px;
+}
+
+.time-grid-container.compact-zoom .day-header {
+  padding: 0.25rem;
+}
+
+.time-grid-container.compact-zoom .day-header .day-name {
+  font-size: 0.6rem;
+}
+
+.time-grid-container.compact-zoom .day-header .day-number {
+  font-size: 0.75rem;
+  width: 24px;
+  height: 24px;
+}
+
 .calendar-task .task-recurrence-icon,
 .calendar-task .task-reminder-icon {
   opacity: 0.75;
@@ -1777,6 +1909,11 @@
     opacity: 0.5;
     height: 4px;
     width: 32px;
+  }
+
+  .calendar-task.micro-zoom .resize-handle,
+  .calendar-task.compact-zoom .resize-handle {
+    display: none;
   }
 }
 
