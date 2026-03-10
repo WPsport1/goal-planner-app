@@ -336,37 +336,22 @@ export default function GoalList() {
                       {goal.progress}%
                     </span>
                     {linkedTasks.length > 0 && (
-                      <span className="goal-tasks-inline">
+                      <span
+                        className="goal-tasks-inline"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          toggleGoalTasks(goal.id);
+                        }}
+                      >
                         <Link2 size={12} />
                         {completedTasks}/{linkedTasks.length} tasks
+                        <ChevronRight size={10} className={`expand-chevron-mini ${isTasksExpanded ? 'rotated' : ''}`} />
                       </span>
                     )}
                   </div>
                 </div>
 
                 <div className="goal-actions">
-                  {linkedTasks.length > 0 && (
-                    <button
-                      className="action-btn expand"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleGoalTasks(goal.id);
-                      }}
-                      title={isTasksExpanded ? 'Hide tasks' : 'Show tasks'}
-                    >
-                      <ChevronRight size={14} className={`expand-chevron ${isTasksExpanded ? 'rotated' : ''}`} />
-                    </button>
-                  )}
-                  <button
-                    className="action-btn tasks"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowQuickTaskForm(showQuickTaskForm === goal.id ? null : goal.id);
-                    }}
-                    title="Add Task"
-                  >
-                    <ListTodo size={14} />
-                  </button>
                   <button
                     className="action-btn edit"
                     onClick={(e) => {
@@ -389,32 +374,6 @@ export default function GoalList() {
                   </button>
                   <ChevronRight size={16} className="chevron" />
                 </div>
-
-                {/* Quick Task Form */}
-                {showQuickTaskForm === goal.id && (
-                  <div className="quick-task-form" onClick={(e) => e.stopPropagation()}>
-                    <input
-                      type="text"
-                      placeholder="Enter task title..."
-                      value={quickTaskTitle}
-                      onChange={(e) => setQuickTaskTitle(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleQuickTaskCreate(goal.id);
-                        if (e.key === 'Escape') {
-                          setShowQuickTaskForm(null);
-                          setQuickTaskTitle('');
-                        }
-                      }}
-                      autoFocus
-                    />
-                    <button
-                      className="quick-task-btn"
-                      onClick={() => handleQuickTaskCreate(goal.id)}
-                    >
-                      <Plus size={16} />
-                    </button>
-                  </div>
-                )}
 
                 {/* Expanded Tasks List */}
                 {isTasksExpanded && linkedTasks.length > 0 && (
