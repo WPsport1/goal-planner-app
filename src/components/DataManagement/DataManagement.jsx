@@ -162,9 +162,11 @@ export default function DataManagement() {
     try {
       const results = await pushAllToCloud();
       if (results.errors.length > 0) {
-        setStatusMessage({ type: 'error', text: `Pushed ${results.pushed} items with ${results.errors.length} error(s).` });
+        const firstErrors = results.errors.slice(0, 3).join('; ');
+        const moreCount = results.errors.length > 3 ? ` (+${results.errors.length - 3} more)` : '';
+        setStatusMessage({ type: 'error', text: `Pushed ${results.pushed} items with ${results.errors.length} error(s): ${firstErrors}${moreCount}` });
       } else {
-        setStatusMessage({ type: 'success', text: `Successfully pushed ${results.pushed} items to cloud.` });
+        setStatusMessage({ type: 'success', text: `Successfully pushed ${results.pushed} items to cloud!` });
       }
     } catch (err) {
       setStatusMessage({ type: 'error', text: 'Cloud push failed: ' + err.message });

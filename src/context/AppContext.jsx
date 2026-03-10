@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useEffect, useCallback, useRef } f
 import { v4 as uuidv4 } from 'uuid';
 import { useAuth } from './AuthContext';
 import {
+  supabase,
   goalService,
   taskService,
   reflectionService,
@@ -1529,9 +1530,10 @@ export function AppProvider({ children }) {
 
   // ============================================
   // CLOUD SYNC — push all local data to Supabase
+  // Uses upsert (insert-or-update) for reliability
   // ============================================
   const pushAllToCloud = useCallback(async () => {
-    if (!isConfigured || !user) {
+    if (!isConfigured || !user || !supabase) {
       throw new Error('Cloud sync not available — not authenticated');
     }
 
@@ -1539,18 +1541,31 @@ export function AppProvider({ children }) {
     setIsSyncing(true);
     setSyncError(null);
     const results = { pushed: 0, errors: [] };
+    const now = new Date().toISOString();
 
     try {
-      // Push goals
+      // Push goals via upsert
       for (const goal of goals) {
         try {
-          const dbGoal = transformGoalToDB(goal);
-          // Try update first, create if not found
-          const updateResult = await goalService.update(goal.id, dbGoal);
-          if (updateResult.error) {
-            const createResult = await goalService.create(dbGoal, user.id);
-            if (createResult.error) results.errors.push('Goal ' + goal.title + ': ' + createResult.error);
-            else results.pushed++;
+          const { error } = await supabase.from('goals').upsert({
+            id: goal.id,
+            user_id: user.id,
+            title: goal.title,
+            description: goal.description || '',
+            category: goal.category || 'Personal Development',
+            priority: goal.priority || 'medium',
+            status: goal.status || 'not_started',
+            target_date: goal.targetDate || null,
+            progress: goal.progress || 0,
+            notes: goal.notes || '',
+            milestones: goal.milestones || [],
+            data_points: goal.dataPoints || [],
+            updated_at: now,
+          }, { onConflict: 'id' });
+
+          if (error) {
+            console.error('[CloudSync] Goal error:', goal.title, error.message);
+            results.errors.push('Goal ' + goal.title + ': ' + error.message);
           } else {
             results.pushed++;
           }
@@ -1559,15 +1574,36 @@ export function AppProvider({ children }) {
         }
       }
 
-      // Push tasks
+      // Push tasks via upsert (without linked_goal_id first to avoid FK issues)
       for (const task of tasks) {
         try {
-          const dbTask = transformTaskToDB(task);
-          const updateResult = await taskService.update(task.id, dbTask);
-          if (updateResult.error) {
-            const createResult = await taskService.create(dbTask, user.id);
-            if (createResult.error) results.errors.push('Task ' + task.title + ': ' + createResult.error);
-            else results.pushed++;
+          const { error } = await supabase.from('tasks').upsert({
+            id: task.id,
+            user_id: user.id,
+            title: task.title,
+            description: task.description || '',
+            type: task.type || 'task',
+            priority: task.priority || 'medium',
+            status: task.status || 'pending',
+            scheduled_date: task.scheduledDate || null,
+            start_time: task.startTime || null,
+            end_time: task.endTime || null,
+            recurrence: task.recurrence || 'none',
+            weekly_days: task.weeklyDays || null,
+            custom_recurrence: task.customRecurrence || null,
+            color: task.color || 'default',
+            completed: task.completed || false,
+            completed_dates: task.completedDates || [],
+            reminder: task.reminder || false,
+            reminder_minutes: task.reminderMinutes || 15,
+            linked_goal_id: null,
+            data_points: task.dataPoints || [],
+            updated_at: now,
+          }, { onConflict: 'id' });
+
+          if (error) {
+            console.error('[CloudSync] Task error:', task.title, error.message);
+            results.errors.push('Task ' + task.title + ': ' + error.message);
           } else {
             results.pushed++;
           }
@@ -1576,15 +1612,38 @@ export function AppProvider({ children }) {
         }
       }
 
-      // Push reflections
+      // Now update linked_goal_id for tasks that have it (goals exist now)
+      for (const task of tasks) {
+        if (task.linkedGoalId) {
+          try {
+            await supabase.from('tasks')
+              .update({ linked_goal_id: task.linkedGoalId })
+              .eq('id', task.id);
+          } catch (e) {
+            // Non-critical — goal link is optional
+          }
+        }
+      }
+
+      // Push reflections via upsert
       for (const refl of reflections) {
         try {
-          const dbRefl = transformReflectionToDB(refl);
-          const updateResult = await reflectionService.update(refl.id, dbRefl);
-          if (updateResult.error) {
-            const createResult = await reflectionService.create(dbRefl, user.id);
-            if (createResult.error) results.errors.push('Reflection: ' + createResult.error);
-            else results.pushed++;
+          const { error } = await supabase.from('reflections').upsert({
+            id: refl.id,
+            user_id: user.id,
+            date: refl.date,
+            mood: refl.mood || 3,
+            rating: refl.rating || 3,
+            gratitude: refl.gratitude || '',
+            wins: refl.wins || '',
+            improvements: refl.improvements || '',
+            tomorrow_focus: refl.tomorrowFocus || '',
+            updated_at: now,
+          }, { onConflict: 'id' });
+
+          if (error) {
+            console.error('[CloudSync] Reflection error:', error.message);
+            results.errors.push('Reflection: ' + error.message);
           } else {
             results.pushed++;
           }
@@ -1593,15 +1652,24 @@ export function AppProvider({ children }) {
         }
       }
 
-      // Push journal entries
+      // Push journal entries via upsert
       for (const entry of journalEntries) {
         try {
-          const dbEntry = transformJournalToDB(entry);
-          const updateResult = await journalService.update(entry.id, dbEntry);
-          if (updateResult.error) {
-            const createResult = await journalService.create(dbEntry, user.id);
-            if (createResult.error) results.errors.push('Journal: ' + createResult.error);
-            else results.pushed++;
+          const { error } = await supabase.from('journal_entries').upsert({
+            id: entry.id,
+            user_id: user.id,
+            date: entry.date || now,
+            content: entry.content || '',
+            mood: entry.mood || 3,
+            energy: entry.energy || 3,
+            gratitude: entry.gratitude || [],
+            tags: entry.tags || [],
+            updated_at: now,
+          }, { onConflict: 'id' });
+
+          if (error) {
+            console.error('[CloudSync] Journal error:', error.message);
+            results.errors.push('Journal: ' + error.message);
           } else {
             results.pushed++;
           }
@@ -1610,23 +1678,35 @@ export function AppProvider({ children }) {
         }
       }
 
-      // Push routines
+      // Push routines via upsert
       for (const [key, routine] of Object.entries(routines)) {
         try {
-          await routineService.upsert({
-            routineKey: key,
-            routineType: routine.type || 'morning',
-            dayOfWeek: routine.dayOfWeek,
-            weekVariant: routine.weekVariant,
+          const { error } = await supabase.from('routines').upsert({
+            user_id: user.id,
+            routine_key: key,
+            routine_type: routine.type || 'morning',
+            day_of_week: routine.dayOfWeek || null,
+            week_variant: routine.weekVariant || null,
             items: routine.items || [],
-          }, user.id);
-          results.pushed++;
+            updated_at: now,
+          }, { onConflict: 'user_id,routine_key' });
+
+          if (error) {
+            console.error('[CloudSync] Routine error:', key, error.message);
+            results.errors.push('Routine ' + key + ': ' + error.message);
+          } else {
+            results.pushed++;
+          }
         } catch (err) {
           results.errors.push('Routine ' + key + ': ' + err.message);
         }
       }
 
+      // Log detailed results
       console.log('[CloudSync] Push complete. Items pushed:', results.pushed, 'Errors:', results.errors.length);
+      if (results.errors.length > 0) {
+        console.log('[CloudSync] Error details:', results.errors);
+      }
     } catch (err) {
       console.error('[CloudSync] Push failed:', err);
       setSyncError(err.message);
