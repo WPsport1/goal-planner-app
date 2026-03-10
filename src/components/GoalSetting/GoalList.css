@@ -390,6 +390,19 @@
   align-items: center;
   gap: 0.25rem;
   padding: 0 0.5rem;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+
+.goal-card:hover .goal-actions {
+  opacity: 1;
+}
+
+/* Always show actions on touch devices */
+@media (pointer: coarse) {
+  .goal-actions {
+    opacity: 1;
+  }
 }
 
 .action-btn {
@@ -575,4 +588,142 @@
 .goal-card.expanded .goal-priority-indicator {
   align-self: flex-start;
   min-height: 100px;
+}
+
+/* ===== Laptop-responsive styles ===== */
+@media (max-width: 1400px) {
+  /* Compact controls */
+  .goal-list-controls {
+    gap: 0.5rem;
+    padding-bottom: 0.5rem;
+  }
+
+  .search-bar {
+    padding: 0.5rem 0.75rem;
+  }
+
+  .search-bar input {
+    font-size: 0.85rem;
+  }
+
+  .control-row {
+    gap: 0.5rem;
+  }
+
+  .filter-group select,
+  .sort-group select {
+    padding: 0.3rem 0.5rem;
+    font-size: 0.75rem;
+  }
+
+  .sort-order-btn {
+    width: 28px;
+    height: 28px;
+  }
+
+  /* Compact goal cards */
+  .goal-content {
+    padding: 0.625rem 0.75rem;
+  }
+
+  .goal-header {
+    margin-bottom: 0.25rem;
+  }
+
+  .goal-header h3 {
+    font-size: 0.875rem;
+  }
+
+  .goal-status {
+    padding: 0.2rem 0.375rem;
+    font-size: 0.65rem;
+  }
+
+  .goal-description {
+    font-size: 0.75rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .goal-meta {
+    gap: 0.75rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .goal-category,
+  .goal-date {
+    font-size: 0.7rem;
+  }
+
+  .progress-bar {
+    height: 5px;
+  }
+
+  .progress-text {
+    font-size: 0.7rem;
+  }
+
+  .goal-drag-handle {
+    width: 24px;
+  }
+
+  /* Compact add goal form */
+  .add-goal-form {
+    padding: 0.75rem;
+    gap: 0.5rem;
+  }
+
+  .add-goal-form input[type="text"],
+  .add-goal-form textarea,
+  .add-goal-form input[type="date"] {
+    padding: 0.5rem 0.75rem;
+    font-size: 0.85rem;
+  }
+
+  .form-row {
+    gap: 0.5rem;
+  }
+
+  .form-row select,
+  .form-row input {
+    padding: 0.5rem 0.625rem;
+    font-size: 0.8rem;
+  }
+
+  .add-goal-btn {
+    padding: 0.625rem;
+    font-size: 0.85rem;
+  }
+}
+
+/* Even tighter on smaller laptops / tablets */
+@media (max-width: 1100px) {
+  .goal-header {
+    flex-direction: column;
+    gap: 0.375rem;
+  }
+
+  .goal-status {
+    align-self: flex-start;
+  }
+
+  .form-row {
+    flex-direction: column;
+  }
+
+  .goal-drag-handle {
+    width: 20px;
+  }
+
+  .goal-content {
+    padding: 0.5rem 0.625rem;
+  }
+
+  .goal-header h3 {
+    font-size: 0.825rem;
+  }
+
+  .goal-meta {
+    flex-wrap: wrap;
+    gap: 0.5rem;
+  }
 }
