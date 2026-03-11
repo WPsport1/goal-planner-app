@@ -24,6 +24,8 @@ import {
 import {
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   Calendar as CalendarIcon,
   Target,
   X,
@@ -39,7 +41,7 @@ const viewOptions = [
 ];
 
 export default function LongTermCalendar() {
-  const { goals, openDetail } = useApp();
+  const { goals, openDetail, collapsedSections, toggleSectionCollapse } = useApp();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState('month');
 
@@ -427,34 +429,46 @@ export default function LongTermCalendar() {
   return (
     <div className="long-term-calendar">
       {/* Calendar Header */}
-      <div className="calendar-header">
-        <div className="calendar-nav">
-          <button className="nav-btn" onClick={navigatePrev}>
-            <ChevronLeft size={18} />
+      <div className={`calendar-header ${collapsedSections.longCalControls ? 'collapsed' : ''}`}>
+        {collapsedSections.longCalControls ? (
+          <button className="cal-collapse-toggle" onClick={() => toggleSectionCollapse('longCalControls')} title="Show controls">
+            <ChevronDown size={12} />
+            <span>Show Controls</span>
           </button>
-          <h3 className="calendar-title">{getHeaderText()}</h3>
-          <button className="nav-btn" onClick={navigateNext}>
-            <ChevronRight size={18} />
-          </button>
-        </div>
-
-        <div className="calendar-controls">
-          <button className="today-btn" onClick={goToToday}>
-            <CalendarIcon size={14} />
-            Today
-          </button>
-          <div className="view-selector">
-            {viewOptions.map((option) => (
-              <button
-                key={option.id}
-                className={`view-btn ${view === option.id ? 'active' : ''}`}
-                onClick={() => setView(option.id)}
-              >
-                {option.label}
+        ) : (
+          <>
+            <div className="calendar-nav">
+              <button className="nav-btn" onClick={navigatePrev}>
+                <ChevronLeft size={18} />
               </button>
-            ))}
-          </div>
-        </div>
+              <h3 className="calendar-title">{getHeaderText()}</h3>
+              <button className="nav-btn" onClick={navigateNext}>
+                <ChevronRight size={18} />
+              </button>
+            </div>
+
+            <div className="calendar-controls">
+              <button className="today-btn" onClick={goToToday}>
+                <CalendarIcon size={14} />
+                Today
+              </button>
+              <div className="view-selector">
+                {viewOptions.map((option) => (
+                  <button
+                    key={option.id}
+                    className={`view-btn ${view === option.id ? 'active' : ''}`}
+                    onClick={() => setView(option.id)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              <button className="cal-collapse-toggle" onClick={() => toggleSectionCollapse('longCalControls')} title="Hide controls">
+                <ChevronUp size={12} />
+              </button>
+            </div>
+          </>
+        )}
       </div>
 
       {/* Calendar Body */}

@@ -217,7 +217,7 @@ const computeOverlapLayout = (tasks) => {
 };
 
 export default function ShortTermCalendar() {
-  const { tasks, goals, addTask, updateTask, deleteTask, openDetail, toggleTaskComplete, lastSaveStatus } = useApp();
+  const { tasks, goals, addTask, updateTask, deleteTask, openDetail, toggleTaskComplete, lastSaveStatus, collapsedSections, toggleSectionCollapse } = useApp();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [view, setView] = useState('day');
   const [currentTime, setCurrentTime] = useState(new Date());
@@ -2138,148 +2138,159 @@ export default function ShortTermCalendar() {
   return (
     <div className="short-term-calendar">
       {/* Calendar Header */}
-      <div className="calendar-header">
-        <div className="calendar-nav">
-          <button className="nav-btn" onClick={navigatePrev}>
-            <ChevronLeft size={18} />
+      <div className={`calendar-header ${collapsedSections.shortCalControls ? 'collapsed' : ''}`}>
+        {collapsedSections.shortCalControls ? (
+          <button className="cal-collapse-toggle" onClick={() => toggleSectionCollapse('shortCalControls')} title="Show controls">
+            <ChevronDown size={12} />
+            <span>Show Controls</span>
           </button>
-          <h3 className="calendar-title">{getHeaderText()}</h3>
-          <button className="nav-btn" onClick={navigateNext}>
-            <ChevronRight size={18} />
-          </button>
-        </div>
-
-        <div className="calendar-controls">
-          <div className="current-time-display">
-            <Clock size={14} />
-            <span>{format(currentTime, 'h:mm a')}</span>
-          </div>
-          <button className="today-btn" onClick={goToToday}>
-            <CalendarIcon size={14} />
-            Today
-          </button>
-          <button
-            className="add-event-btn"
-            onClick={() => {
-              setEditingTask(null);
-              setEventForm({
-                title: '',
-                description: '',
-                type: 'task',
-                priority: 'medium',
-                color: 'default',
-                scheduledDate: format(currentDate, 'yyyy-MM-dd'),
-                startTime: '09:00',
-                endTime: '10:00',
-                recurrence: 'none',
-                weeklyDays: [],
-                customRecurrence: {
-                  frequency: 'weekly',
-                  interval: 1,
-                  daysOfWeek: [],
-                  endType: 'never',
-                  endDate: '',
-                  endCount: 10,
-                },
-                reminder: false,
-                reminderMinutes: 15,
-                linkedGoalId: '',
-              });
-              setShowCustomRecurrence(false);
-              setShowEventModal(true);
-            }}
-          >
-            <Plus size={14} />
-            Add
-          </button>
-          <button
-            className={`search-toggle-btn ${showSearchBar ? 'active' : ''}`}
-            onClick={() => setShowSearchBar(!showSearchBar)}
-            title="Search & filter events"
-          >
-            <Search size={14} />
-          </button>
-          <div className="view-selector">
-            {viewOptions.map((option) => (
-              <button
-                key={option.id}
-                className={`view-btn ${view === option.id ? 'active' : ''}`}
-                onClick={() => setView(option.id)}
-              >
-                {option.label}
+        ) : (
+          <>
+            <div className="calendar-nav">
+              <button className="nav-btn" onClick={navigatePrev}>
+                <ChevronLeft size={18} />
               </button>
-            ))}
-          </div>
-          {(view === 'day' || view === 'week') && (
-            <div className="zoom-controls">
-              <button
-                className="zoom-btn"
-                onClick={() => {
-                  const newLevel = Math.max(0, zoomLevel - 1);
-                  setZoomLevel(newLevel);
-                  // When entering hour-focus, set focus to current hour
-                  if (ZOOM_LEVELS[newLevel].hourFocus && !ZOOM_LEVELS[zoomLevel].hourFocus) {
-                    setFocusHour(new Date().getHours());
-                  }
-                }}
-                disabled={zoomLevel === 0}
-                title="Zoom out"
-              >
-                <ZoomOut size={14} />
-              </button>
-              <span className="zoom-label" title="Ctrl+Scroll to zoom">{ZOOM_LEVELS[zoomLevel].label}</span>
-              <button
-                className="zoom-btn"
-                onClick={() => {
-                  const maxLevel = view === 'week' ? 9 : ZOOM_LEVELS.length - 1; // Week view limited to 8x
-                  const newLevel = Math.min(maxLevel, zoomLevel + 1);
-                  setZoomLevel(newLevel);
-                  // When entering hour-focus, set focus to current hour
-                  if (ZOOM_LEVELS[newLevel].hourFocus && !ZOOM_LEVELS[zoomLevel].hourFocus) {
-                    setFocusHour(new Date().getHours());
-                  }
-                }}
-                disabled={zoomLevel === (view === 'week' ? 9 : ZOOM_LEVELS.length - 1)}
-                title="Zoom in"
-              >
-                <ZoomIn size={14} />
+              <h3 className="calendar-title">{getHeaderText()}</h3>
+              <button className="nav-btn" onClick={navigateNext}>
+                <ChevronRight size={18} />
               </button>
             </div>
-          )}
 
-          {/* Hour Focus Navigation — only in Day view at deep zoom */}
-          {isHourFocus && (
-            <div className="hour-focus-controls">
-              <button
-                className="hour-nav-btn"
-                onClick={() => setFocusHour(Math.max(0, focusHour - 1))}
-                disabled={focusHour === 0}
-                title="Previous hour"
-              >
-                <ChevronUp size={14} />
-              </button>
-              <span className="hour-focus-label">
-                <Crosshair size={12} />
-                {format(setHours(new Date(), focusHour), 'h a')}{focusWindowHours > 1 ? ` — ${format(setHours(new Date(), Math.min(23, focusHour + focusWindowHours - 1)), 'h a')}` : ''}
-              </span>
-              <button
-                className="hour-nav-btn"
-                onClick={() => setFocusHour(Math.min(23, focusHour + 1))}
-                disabled={focusHour === 23}
-                title="Next hour"
-              >
-                <ChevronDown size={14} />
+            <div className="calendar-controls">
+              <div className="current-time-display">
+                <Clock size={14} />
+                <span>{format(currentTime, 'h:mm a')}</span>
+              </div>
+              <button className="today-btn" onClick={goToToday}>
+                <CalendarIcon size={14} />
+                Today
               </button>
               <button
-                className="hour-now-btn"
-                onClick={() => setFocusHour(new Date().getHours())}
-                title="Jump to current hour"
+                className="add-event-btn"
+                onClick={() => {
+                  setEditingTask(null);
+                  setEventForm({
+                    title: '',
+                    description: '',
+                    type: 'task',
+                    priority: 'medium',
+                    color: 'default',
+                    scheduledDate: format(currentDate, 'yyyy-MM-dd'),
+                    startTime: '09:00',
+                    endTime: '10:00',
+                    recurrence: 'none',
+                    weeklyDays: [],
+                    customRecurrence: {
+                      frequency: 'weekly',
+                      interval: 1,
+                      daysOfWeek: [],
+                      endType: 'never',
+                      endDate: '',
+                      endCount: 10,
+                    },
+                    reminder: false,
+                    reminderMinutes: 15,
+                    linkedGoalId: '',
+                  });
+                  setShowCustomRecurrence(false);
+                  setShowEventModal(true);
+                }}
               >
-                Now
+                <Plus size={14} />
+                Add
+              </button>
+              <button
+                className={`search-toggle-btn ${showSearchBar ? 'active' : ''}`}
+                onClick={() => setShowSearchBar(!showSearchBar)}
+                title="Search & filter events"
+              >
+                <Search size={14} />
+              </button>
+              <div className="view-selector">
+                {viewOptions.map((option) => (
+                  <button
+                    key={option.id}
+                    className={`view-btn ${view === option.id ? 'active' : ''}`}
+                    onClick={() => setView(option.id)}
+                  >
+                    {option.label}
+                  </button>
+                ))}
+              </div>
+              {(view === 'day' || view === 'week') && (
+                <div className="zoom-controls">
+                  <button
+                    className="zoom-btn"
+                    onClick={() => {
+                      const newLevel = Math.max(0, zoomLevel - 1);
+                      setZoomLevel(newLevel);
+                      if (ZOOM_LEVELS[newLevel].hourFocus && !ZOOM_LEVELS[zoomLevel].hourFocus) {
+                        setFocusHour(new Date().getHours());
+                      }
+                    }}
+                    disabled={zoomLevel === 0}
+                    title="Zoom out"
+                  >
+                    <ZoomOut size={14} />
+                  </button>
+                  <span className="zoom-label" title="Ctrl+Scroll to zoom">{ZOOM_LEVELS[zoomLevel].label}</span>
+                  <button
+                    className="zoom-btn"
+                    onClick={() => {
+                      const maxLevel = view === 'week' ? 9 : ZOOM_LEVELS.length - 1;
+                      const newLevel = Math.min(maxLevel, zoomLevel + 1);
+                      setZoomLevel(newLevel);
+                      if (ZOOM_LEVELS[newLevel].hourFocus && !ZOOM_LEVELS[zoomLevel].hourFocus) {
+                        setFocusHour(new Date().getHours());
+                      }
+                    }}
+                    disabled={zoomLevel === (view === 'week' ? 9 : ZOOM_LEVELS.length - 1)}
+                    title="Zoom in"
+                  >
+                    <ZoomIn size={14} />
+                  </button>
+                </div>
+              )}
+
+              {/* Hour Focus Navigation — only in Day view at deep zoom */}
+              {isHourFocus && (
+                <div className="hour-focus-controls">
+                  <button
+                    className="hour-nav-btn"
+                    onClick={() => setFocusHour(Math.max(0, focusHour - 1))}
+                    disabled={focusHour === 0}
+                    title="Previous hour"
+                  >
+                    <ChevronUp size={14} />
+                  </button>
+                  <span className="hour-focus-label">
+                    <Crosshair size={12} />
+                    {format(setHours(new Date(), focusHour), 'h a')}{focusWindowHours > 1 ? ` — ${format(setHours(new Date(), Math.min(23, focusHour + focusWindowHours - 1)), 'h a')}` : ''}
+                  </span>
+                  <button
+                    className="hour-nav-btn"
+                    onClick={() => setFocusHour(Math.min(23, focusHour + 1))}
+                    disabled={focusHour === 23}
+                    title="Next hour"
+                  >
+                    <ChevronDown size={14} />
+                  </button>
+                  <button
+                    className="hour-now-btn"
+                    onClick={() => setFocusHour(new Date().getHours())}
+                    title="Jump to current hour"
+                  >
+                    Now
+                  </button>
+                </div>
+              )}
+
+              <button className="cal-collapse-toggle" onClick={() => toggleSectionCollapse('shortCalControls')} title="Hide controls">
+                <ChevronUp size={12} />
               </button>
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
 
       {/* Search & Filter Bar */}

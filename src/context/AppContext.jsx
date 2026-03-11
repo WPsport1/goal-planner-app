@@ -130,6 +130,22 @@ export function AppProvider({ children }) {
   const [leftPanelFullscreen, setLeftPanelFullscreen] = useState(false);
   const [rightPanelFullscreen, setRightPanelFullscreen] = useState(false);
 
+  // Collapsible sections state (persisted to localStorage)
+  const [collapsedSections, setCollapsedSections] = useState(() => {
+    try {
+      const saved = localStorage.getItem('goalPlanner_collapsedSections');
+      return saved ? JSON.parse(saved) : {};
+    } catch { return {}; }
+  });
+
+  const toggleSectionCollapse = (key) => {
+    setCollapsedSections((prev) => {
+      const next = { ...prev, [key]: !prev[key] };
+      localStorage.setItem('goalPlanner_collapsedSections', JSON.stringify(next));
+      return next;
+    });
+  };
+
   // Celebration state
   const [celebration, setCelebration] = useState(null);
 
@@ -1832,6 +1848,10 @@ export function AppProvider({ children }) {
     toggleLeftFullscreen,
     toggleRightFullscreen,
     exitFullscreen,
+
+    // Collapsible sections
+    collapsedSections,
+    toggleSectionCollapse,
 
     // Data Management
     showDataManagement,

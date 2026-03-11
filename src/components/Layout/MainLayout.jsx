@@ -14,6 +14,7 @@ import {
   Cloud,
   CloudOff,
   ChevronDown,
+  ChevronUp,
   Keyboard,
   Sun,
   Moon,
@@ -54,6 +55,8 @@ export default function MainLayout({ leftPanel, rightPanel }) {
     setShowLifeScore,
     setShowWeeklyPlanning,
     setShowDataManagement,
+    collapsedSections,
+    toggleSectionCollapse,
   } = useApp();
 
   const { user, signOut, isConfigured } = useAuth();
@@ -157,7 +160,13 @@ export default function MainLayout({ leftPanel, rightPanel }) {
   return (
     <div className="main-layout">
       {/* Top Navigation */}
-      <header className="main-header">
+      <header className={`main-header ${collapsedSections.appHeader ? 'collapsed' : ''}`}>
+        {collapsedSections.appHeader ? (
+          <button className="section-collapse-toggle header-expand-btn" onClick={() => toggleSectionCollapse('appHeader')} title="Expand header">
+            <ChevronDown size={14} />
+          </button>
+        ) : (
+          <>
         <div className="header-brand">
           <Target className="brand-icon" />
           <h1>Goal Planner</h1>
@@ -409,7 +418,12 @@ export default function MainLayout({ leftPanel, rightPanel }) {
               </div>
             )}
           </div>
+          <button className="section-collapse-toggle" onClick={() => toggleSectionCollapse('appHeader')} title="Collapse header">
+            <ChevronUp size={14} />
+          </button>
         </div>
+          </>
+        )}
       </header>
 
       {/* Mobile Panel Toggle */}
@@ -440,15 +454,28 @@ export default function MainLayout({ leftPanel, rightPanel }) {
             className={`panel left-panel ${leftPanelFullscreen ? 'fullscreen' : ''}`}
           >
             {!isMobile && (
-              <div className="panel-header">
-                <h2>{activeTab === 'goals' ? 'Goals' : 'Tasks'}</h2>
-                <button
-                  className="fullscreen-toggle"
-                  onClick={toggleLeftFullscreen}
-                  title={leftPanelFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
-                >
-                  {leftPanelFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-                </button>
+              <div className={`panel-header ${collapsedSections.leftPanelHeader ? 'collapsed' : ''}`}>
+                {collapsedSections.leftPanelHeader ? (
+                  <button className="section-collapse-toggle panel-expand-btn" onClick={() => toggleSectionCollapse('leftPanelHeader')} title="Expand">
+                    <ChevronDown size={12} />
+                  </button>
+                ) : (
+                  <>
+                    <h2>{activeTab === 'goals' ? 'Goals' : 'Tasks'}</h2>
+                    <div className="panel-header-actions">
+                      <button
+                        className="fullscreen-toggle"
+                        onClick={toggleLeftFullscreen}
+                        title={leftPanelFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                      >
+                        {leftPanelFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                      </button>
+                      <button className="section-collapse-toggle" onClick={() => toggleSectionCollapse('leftPanelHeader')} title="Collapse">
+                        <ChevronUp size={12} />
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             )}
             <div className="panel-content">{leftPanel}</div>
@@ -466,15 +493,28 @@ export default function MainLayout({ leftPanel, rightPanel }) {
             className={`panel right-panel ${rightPanelFullscreen ? 'fullscreen' : ''}`}
           >
             {!isMobile && (
-              <div className="panel-header">
-                <h2>{activeTab === 'goals' ? 'Long-Term Calendar' : 'Short-Term Calendar'}</h2>
-                <button
-                  className="fullscreen-toggle"
-                  onClick={toggleRightFullscreen}
-                  title={rightPanelFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
-                >
-                  {rightPanelFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
-                </button>
+              <div className={`panel-header ${collapsedSections.rightPanelHeader ? 'collapsed' : ''}`}>
+                {collapsedSections.rightPanelHeader ? (
+                  <button className="section-collapse-toggle panel-expand-btn" onClick={() => toggleSectionCollapse('rightPanelHeader')} title="Expand">
+                    <ChevronDown size={12} />
+                  </button>
+                ) : (
+                  <>
+                    <h2>{activeTab === 'goals' ? 'Long-Term Calendar' : 'Short-Term Calendar'}</h2>
+                    <div className="panel-header-actions">
+                      <button
+                        className="fullscreen-toggle"
+                        onClick={toggleRightFullscreen}
+                        title={rightPanelFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}
+                      >
+                        {rightPanelFullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+                      </button>
+                      <button className="section-collapse-toggle" onClick={() => toggleSectionCollapse('rightPanelHeader')} title="Collapse">
+                        <ChevronUp size={12} />
+                      </button>
+                    </div>
+                  </>
+                )}
               </div>
             )}
             <div className="panel-content">{rightPanel}</div>

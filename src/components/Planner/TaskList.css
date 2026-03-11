@@ -6,6 +6,30 @@
   height: 100%;
 }
 
+/* Controls Collapse Toggle */
+.task-list .controls-collapse-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  width: 100%;
+  padding: 0.25rem 0;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--border-primary);
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.task-list .controls-collapse-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
 /* Controls Section */
 .task-list-controls {
   display: flex;

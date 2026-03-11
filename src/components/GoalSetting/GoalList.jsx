@@ -4,6 +4,8 @@ import {
   Plus,
   GripVertical,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   Target,
   Trash2,
   Edit3,
@@ -36,7 +38,7 @@ const statusLabels = {
 };
 
 export default function GoalList() {
-  const { goals, addGoal, deleteGoal, openDetail, reorderGoals, getTasksForGoal, createTaskForGoal, setActiveTab } = useApp();
+  const { goals, addGoal, deleteGoal, openDetail, reorderGoals, getTasksForGoal, createTaskForGoal, setActiveTab, collapsedSections, toggleSectionCollapse } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('priority'); // priority, date, progress, name
   const [sortOrder, setSortOrder] = useState('desc');
@@ -167,7 +169,15 @@ export default function GoalList() {
 
   return (
     <div className="goal-list">
+      {/* Collapse toggle for controls */}
+      <button className="controls-collapse-toggle" onClick={() => toggleSectionCollapse('goalControls')} title={collapsedSections.goalControls ? 'Show controls' : 'Hide controls'}>
+        {collapsedSections.goalControls ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+        <span>{collapsedSections.goalControls ? 'Show Controls' : 'Hide Controls'}</span>
+      </button>
+
       {/* Search and Controls */}
+      {!collapsedSections.goalControls && (
+      <>
       <div className="goal-list-controls">
         <div className="search-bar">
           <Search size={16} />
@@ -276,6 +286,8 @@ export default function GoalList() {
           <Plus size={18} />
           <span>Add New Goal</span>
         </button>
+      )}
+      </>
       )}
 
       {/* Goals List */}

@@ -64,7 +64,7 @@ const reminderOptions = [
 ];
 
 export default function TaskList() {
-  const { tasks, goals, addTask, deleteTask, toggleTaskComplete, openDetail, reorderTasks, lastSaveStatus } = useApp();
+  const { tasks, goals, addTask, deleteTask, toggleTaskComplete, openDetail, reorderTasks, lastSaveStatus, collapsedSections, toggleSectionCollapse } = useApp();
   const [searchTerm, setSearchTerm] = useState('');
   const [sortBy, setSortBy] = useState('time'); // time, priority, type, name
   const [sortOrder, setSortOrder] = useState('asc');
@@ -316,7 +316,15 @@ export default function TaskList() {
 
   return (
     <div className="task-list">
+      {/* Collapse toggle for controls */}
+      <button className="controls-collapse-toggle" onClick={() => toggleSectionCollapse('taskControls')} title={collapsedSections.taskControls ? 'Show controls' : 'Hide controls'}>
+        {collapsedSections.taskControls ? <ChevronDown size={12} /> : <ChevronUp size={12} />}
+        <span>{collapsedSections.taskControls ? 'Show Controls' : 'Hide Controls'}</span>
+      </button>
+
       {/* Search and Controls */}
+      {!collapsedSections.taskControls && (
+      <>
       <div className="task-list-controls">
         <div className="search-bar">
           <Search size={16} />
@@ -519,6 +527,8 @@ export default function TaskList() {
           <Plus size={18} />
           <span>Add New Task</span>
         </button>
+      )}
+      </>
       )}
 
       {/* Tasks Container */}

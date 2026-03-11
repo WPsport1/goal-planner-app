@@ -18,6 +18,39 @@
   flex-shrink: 0;
 }
 
+.main-header.collapsed {
+  padding: 0.2rem 1.5rem;
+  justify-content: center;
+}
+
+/* Section collapse toggle — shared style */
+.section-collapse-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 0.15rem 0.5rem;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.section-collapse-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
+.header-expand-btn {
+  padding: 0.1rem 2rem;
+}
+
+.panel-expand-btn {
+  margin: 0 auto;
+  padding: 0 2rem;
+}
+
 .header-brand {
   display: flex;
   align-items: center;
@@ -500,6 +533,17 @@
   background: var(--bg-tertiary);
   border-bottom: 1px solid var(--border-primary);
   flex-shrink: 0;
+}
+
+.panel-header.collapsed {
+  padding: 0.15rem 1.25rem;
+  justify-content: center;
+}
+
+.panel-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
 }
 
 .panel-header h2 {

@@ -17,6 +17,33 @@
   border-bottom: 1px solid var(--border-primary);
 }
 
+.long-term-calendar .calendar-header.collapsed {
+  justify-content: center;
+  padding-bottom: 0.25rem;
+}
+
+.cal-collapse-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  padding: 0.15rem 0.75rem;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.cal-collapse-toggle:hover {
+  background: var(--bg-hover);
+  color: var(--text-secondary);
+}
+
 .calendar-nav {
   display: flex;
   align-items: center;
