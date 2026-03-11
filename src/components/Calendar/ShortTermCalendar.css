@@ -800,6 +800,67 @@
   height: 22px;
 }
 
+/* Ultra-micro zoom — extreme zoom out (⅛x, ¼x) */
+.time-grid-container.ultra-micro-zoom .time-label {
+  font-size: 0.35rem;
+  padding-right: 0.1rem;
+}
+
+.time-grid-container.ultra-micro-zoom .time-labels {
+  width: 24px;
+  min-width: 24px;
+}
+
+.time-grid-container.ultra-micro-zoom .day-column {
+  min-width: 30px;
+}
+
+.time-grid-container.ultra-micro-zoom .day-header {
+  padding: 0.15rem 0.1rem;
+}
+
+.time-grid-container.ultra-micro-zoom .day-header .day-name {
+  font-size: 0.4rem;
+}
+
+.time-grid-container.ultra-micro-zoom .day-header .day-number {
+  font-size: 0.55rem;
+  width: 18px;
+  height: 18px;
+}
+
+.time-grid-container.ultra-micro-zoom .hour-slot {
+  border-bottom-width: 0.5px;
+}
+
+.calendar-task.ultra-micro-zoom {
+  padding: 0 1px;
+  border-left-width: 1px;
+  border-radius: 1px;
+  min-height: 1px;
+  font-size: 0;
+  line-height: 1;
+}
+
+.calendar-task.ultra-micro-zoom .task-compact-line {
+  gap: 1px;
+  padding: 0;
+}
+
+.calendar-task.ultra-micro-zoom .task-compact-line .task-time,
+.calendar-task.ultra-micro-zoom .task-compact-line .task-title {
+  font-size: 0.35rem;
+  line-height: 1;
+}
+
+.calendar-task.ultra-micro-zoom .task-top-bar,
+.calendar-task.ultra-micro-zoom .task-title,
+.calendar-task.ultra-micro-zoom .task-icons-right,
+.calendar-task.ultra-micro-zoom .task-description-preview,
+.calendar-task.ultra-micro-zoom .resize-handle {
+  display: none;
+}
+
 /* Compact zoom container — slightly smaller labels */
 .time-grid-container.compact-zoom .time-label {
   font-size: 0.55rem;
