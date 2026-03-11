@@ -415,7 +415,7 @@
   background: transparent;
   border: none;
   border-radius: 4px;
-  color: var(--text-muted);
+  color: var(--text-tertiary);
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -433,7 +433,7 @@
 }
 
 .goal-actions .chevron {
-  color: var(--text-muted);
+  color: var(--text-tertiary);
   margin-left: 0.25rem;
 }
 
