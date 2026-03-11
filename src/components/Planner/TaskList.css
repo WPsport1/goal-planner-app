@@ -415,39 +415,40 @@
 .task-actions {
   display: flex;
   align-items: center;
-  gap: 0.25rem;
-  padding: 0 0.5rem;
+  gap: 0.375rem;
+  padding: 0 0.625rem;
+  flex-shrink: 0;
 }
 
-.task-actions .action-btn {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
+.task-action-btn {
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  width: 32px !important;
+  height: 32px !important;
+  flex: none !important;
+  background: var(--bg-elevated) !important;
+  border: 1px solid var(--border-secondary) !important;
+  border-radius: 6px !important;
+  cursor: pointer !important;
+  transition: all 0.2s ease !important;
+  padding: 0 !important;
+}
+
+.task-edit-btn:hover {
+  background: rgba(96, 165, 250, 0.15) !important;
+  border-color: #60a5fa !important;
+}
+
+.task-delete-btn:hover {
+  background: rgba(248, 113, 113, 0.15) !important;
+  border-color: #f87171 !important;
+}
+
+.task-chevron-icon {
   color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.task-actions .action-btn:hover {
-  background: var(--bg-elevated);
-}
-
-.task-actions .action-btn.edit:hover {
-  color: var(--accent-primary);
-}
-
-.task-actions .action-btn.delete:hover {
-  color: var(--error);
-}
-
-.task-actions .chevron {
-  color: var(--text-secondary);
-  margin-left: 0.25rem;
+  margin-left: 0.125rem;
+  flex-shrink: 0;
 }
 
 /* Reminder Section in Add Task Form */

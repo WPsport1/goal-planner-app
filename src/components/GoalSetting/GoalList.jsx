@@ -353,26 +353,26 @@ export default function GoalList() {
 
                 <div className="goal-actions">
                   <button
-                    className="action-btn edit"
+                    className="goal-action-btn goal-edit-btn"
                     onClick={(e) => {
                       e.stopPropagation();
                       openDetail(goal);
                     }}
                     title="Edit"
                   >
-                    <Edit3 size={14} />
+                    <Edit3 size={18} color="#60a5fa" />
                   </button>
                   <button
-                    className="action-btn delete"
+                    className="goal-action-btn goal-delete-btn"
                     onClick={(e) => {
                       e.stopPropagation();
                       if (confirm('Delete this goal?')) deleteGoal(goal.id);
                     }}
                     title="Delete"
                   >
-                    <Trash2 size={14} />
+                    <Trash2 size={18} color="#f87171" />
                   </button>
-                  <ChevronRight size={16} className="chevron" />
+                  <ChevronRight size={16} className="goal-chevron-icon" />
                 </div>
 
                 {/* Expanded Tasks List */}

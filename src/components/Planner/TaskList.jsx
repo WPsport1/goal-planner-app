@@ -289,26 +289,26 @@ export default function TaskList() {
 
         <div className="task-actions">
           <button
-            className="action-btn edit"
+            className="task-action-btn task-edit-btn"
             onClick={(e) => {
               e.stopPropagation();
               openDetail(task);
             }}
             title="Edit"
           >
-            <Edit3 size={14} />
+            <Edit3 size={18} color="#60a5fa" />
           </button>
           <button
-            className="action-btn delete"
+            className="task-action-btn task-delete-btn"
             onClick={(e) => {
               e.stopPropagation();
               if (confirm('Delete this task?')) deleteTask(task.id);
             }}
             title="Delete"
           >
-            <Trash2 size={14} />
+            <Trash2 size={18} color="#f87171" />
           </button>
-          <ChevronRight size={16} className="chevron" />
+          <ChevronRight size={16} className="task-chevron-icon" />
         </div>
       </div>
     );
