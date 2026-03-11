@@ -428,7 +428,7 @@
   background: transparent;
   border: none;
   border-radius: 4px;
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   cursor: pointer;
   transition: all 0.2s ease;
 }
@@ -446,7 +446,7 @@
 }
 
 .task-actions .chevron {
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
   margin-left: 0.25rem;
 }
 
