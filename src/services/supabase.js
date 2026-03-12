@@ -216,9 +216,20 @@ export const goalService = {
       .from('goals')
       .select('*')
       .eq('user_id', userId)
+      .order('sort_order', { ascending: true })
       .order('created_at', { ascending: false });
 
     return { data, error };
+  },
+
+  async updateSortOrder(items, userId) {
+    if (!supabase) return { data: null, error: 'Supabase not configured' };
+    const promises = items.map((item, index) =>
+      supabase.from('goals').update({ sort_order: index, updated_at: new Date().toISOString() }).eq('id', item.id).eq('user_id', userId)
+    );
+    const results = await Promise.all(promises);
+    const errors = results.filter(r => r.error);
+    return { error: errors.length > 0 ? errors[0].error : null };
   },
 
   async create(goal, userId) {
@@ -278,9 +289,20 @@ export const taskService = {
       .from('tasks')
       .select('*')
       .eq('user_id', userId)
+      .order('sort_order', { ascending: true })
       .order('created_at', { ascending: false });
 
     return { data, error };
+  },
+
+  async updateSortOrder(items, userId) {
+    if (!supabase) return { data: null, error: 'Supabase not configured' };
+    const promises = items.map((item, index) =>
+      supabase.from('tasks').update({ sort_order: index, updated_at: new Date().toISOString() }).eq('id', item.id).eq('user_id', userId)
+    );
+    const results = await Promise.all(promises);
+    const errors = results.filter(r => r.error);
+    return { error: errors.length > 0 ? errors[0].error : null };
   },
 
   async create(task, userId) {

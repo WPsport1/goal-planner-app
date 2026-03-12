@@ -114,6 +114,11 @@ export function AppProvider({ children }) {
   const [lastSaveStatus, setLastSaveStatus] = useState(null); // { time, success, key }
   const dataLoadedRef = useRef(false); // Track whether initial load has completed
 
+  // Undo/Redo state
+  const [undoStack, setUndoStack] = useState([]);
+  const [redoStack, setRedoStack] = useState([]);
+  const MAX_UNDO_HISTORY = 50;
+
   // State for goals (long-term)
   const [goals, setGoals] = useState([]);
 
@@ -192,142 +197,107 @@ export function AppProvider({ children }) {
   // Data Management state
   const [showDataManagement, setShowDataManagement] = useState(false);
 
-  // Load data on mount — localStorage is ALWAYS the source of truth.
-  // Supabase cloud sync is a background enhancement, never blocks or overwrites local data.
+  // Load data on mount — CLOUD-PRIMARY: Supabase is the source of truth.
+  // localStorage is used as a fallback cache for offline/fast loads.
   useEffect(() => {
     const loadData = async () => {
-      console.log('[AppContext] loadData starting — localStorage-first mode');
+      console.log('[AppContext] loadData starting — cloud-primary mode');
       setIsLoading(true);
       setSyncError(null);
 
-      try {
-        // =============================================
-        // STEP 1: Always load from localStorage ONLY.
-        // This is the single source of truth.
-        // =============================================
-        const savedGoals = safeLocalGet('goals', null);
-        const savedTasks = safeLocalGet('tasks', null);
-        const savedReflections = safeLocalGet('reflections', []);
-
-        console.log('[AppContext] localStorage — goals:', savedGoals?.length ?? 'null', 'tasks:', savedTasks?.length ?? 'null');
-
-        if (savedGoals !== null && Array.isArray(savedGoals)) {
-          setGoals(savedGoals);
-        } else {
-          // First time user — create sample data and save it immediately
-          console.log('[AppContext] No saved goals — creating sample data');
-          const sample = createSampleData();
-          setGoals(sample.goals);
-          safeLocalSet('goals', sample.goals);
-        }
-
-        if (savedTasks !== null && Array.isArray(savedTasks)) {
-          setTasks(savedTasks);
-        } else {
-          console.log('[AppContext] No saved tasks — creating sample data');
-          const sample = createSampleData();
-          setTasks(sample.tasks);
-          safeLocalSet('tasks', sample.tasks);
-        }
-
-        if (Array.isArray(savedReflections)) {
-          setReflections(savedReflections);
-        }
-      } catch (err) {
-        console.error('[AppContext] Error loading data:', err);
-        setSyncError(err.message);
-      } finally {
-        dataLoadedRef.current = true;
-        setIsLoading(false);
-        console.log('[AppContext] loadData complete, dataLoadedRef=true');
-      }
+      let loadedFromCloud = false;
 
       // =============================================
-      // STEP 2: Cloud pull (non-blocking, fills gaps)
-      // Runs AFTER localStorage load, won't block UI
+      // STEP 1: Try loading from Supabase (source of truth)
       // =============================================
       if (isConfigured && user) {
-        console.log('[CloudSync] Pulling cloud data to fill gaps...');
+        console.log('[CloudSync] Loading from cloud (source of truth)...');
         try {
           const goalsResult = await goalService.getAll(user.id);
-          if (goalsResult.data && goalsResult.data.length > 0) {
+          if (!goalsResult.error && goalsResult.data) {
             const cloudGoals = goalsResult.data.map(transformGoalFromDB);
-            setGoals(prev => {
-              if (prev.length === 0) {
-                safeLocalSet('goals', cloudGoals);
-                return cloudGoals;
-              }
-              const mergeMap = new Map();
-              prev.forEach(g => mergeMap.set(g.id, g));
-              cloudGoals.forEach(g => { if (!mergeMap.has(g.id)) mergeMap.set(g.id, g); });
-              const merged = Array.from(mergeMap.values());
-              safeLocalSet('goals', merged);
-              return merged;
-            });
+            setGoals(cloudGoals);
+            safeLocalSet('goals', cloudGoals); // Cache locally
+            console.log('[CloudSync] Goals loaded from cloud:', cloudGoals.length);
           }
 
           const tasksResult = await taskService.getAll(user.id);
-          if (tasksResult.data && tasksResult.data.length > 0) {
+          if (!tasksResult.error && tasksResult.data) {
             const cloudTasks = tasksResult.data.map(transformTaskFromDB);
-            setTasks(prev => {
-              if (prev.length === 0) {
-                safeLocalSet('tasks', cloudTasks);
-                return cloudTasks;
-              }
-              const mergeMap = new Map();
-              prev.forEach(t => mergeMap.set(t.id, t));
-              cloudTasks.forEach(t => { if (!mergeMap.has(t.id)) mergeMap.set(t.id, t); });
-              const merged = Array.from(mergeMap.values());
-              safeLocalSet('tasks', merged);
-              return merged;
-            });
+            setTasks(cloudTasks);
+            safeLocalSet('tasks', cloudTasks); // Cache locally
+            console.log('[CloudSync] Tasks loaded from cloud:', cloudTasks.length);
           }
 
           const reflResult = await reflectionService.getAll(user.id);
-          if (reflResult.data && reflResult.data.length > 0) {
+          if (!reflResult.error && reflResult.data) {
             const cloudReflections = reflResult.data.map(transformReflectionFromDB);
-            setReflections(prev => {
-              const mergeMap = new Map();
-              prev.forEach(r => mergeMap.set(r.id, r));
-              cloudReflections.forEach(r => { if (!mergeMap.has(r.id)) mergeMap.set(r.id, r); });
-              const merged = Array.from(mergeMap.values());
-              safeLocalSet('reflections', merged);
-              return merged;
-            });
+            setReflections(cloudReflections);
+            safeLocalSet('reflections', cloudReflections);
           }
 
           const journalResult = await journalService.getAll(user.id);
-          if (journalResult.data && journalResult.data.length > 0) {
+          if (!journalResult.error && journalResult.data) {
             const cloudJournal = journalResult.data.map(transformJournalFromDB);
-            setJournalEntries(prev => {
-              const mergeMap = new Map();
-              prev.forEach(e => mergeMap.set(e.id, e));
-              cloudJournal.forEach(e => { if (!mergeMap.has(e.id)) mergeMap.set(e.id, e); });
-              const merged = Array.from(mergeMap.values());
-              localStorage.setItem('journalEntries', JSON.stringify(merged));
-              return merged;
-            });
+            setJournalEntries(cloudJournal);
+            localStorage.setItem('journalEntries', JSON.stringify(cloudJournal));
           }
 
           const routinesResult = await routineService.getAll(user.id);
-          if (routinesResult.data && routinesResult.data.length > 0) {
+          if (!routinesResult.error && routinesResult.data && routinesResult.data.length > 0) {
             const cloudRoutines = {};
             routinesResult.data.forEach(r => {
               cloudRoutines[r.routine_key] = transformRoutineFromDB(r);
             });
-            setRoutines(prev => {
-              const merged = { ...cloudRoutines, ...prev }; // local overrides cloud
-              localStorage.setItem('routines', JSON.stringify(merged));
-              return merged;
-            });
+            setRoutines(cloudRoutines);
+            localStorage.setItem('routines', JSON.stringify(cloudRoutines));
           }
 
-          console.log('[CloudSync] Cloud pull complete');
+          loadedFromCloud = true;
+          console.log('[CloudSync] Cloud load complete — all data from Supabase');
         } catch (err) {
-          console.error('[CloudSync] Pull failed (non-blocking):', err);
-          // Don't set syncError — this is a background operation
+          console.error('[CloudSync] Cloud load failed, falling back to localStorage cache:', err);
         }
       }
+
+      // =============================================
+      // STEP 2: Fallback to localStorage cache (offline or not configured)
+      // =============================================
+      if (!loadedFromCloud) {
+        console.log('[AppContext] Loading from localStorage cache (fallback)');
+        try {
+          const savedGoals = safeLocalGet('goals', null);
+          const savedTasks = safeLocalGet('tasks', null);
+          const savedReflections = safeLocalGet('reflections', []);
+
+          if (savedGoals !== null && Array.isArray(savedGoals)) {
+            setGoals(savedGoals);
+          } else {
+            const sample = createSampleData();
+            setGoals(sample.goals);
+            safeLocalSet('goals', sample.goals);
+          }
+
+          if (savedTasks !== null && Array.isArray(savedTasks)) {
+            setTasks(savedTasks);
+          } else {
+            const sample = createSampleData();
+            setTasks(sample.tasks);
+            safeLocalSet('tasks', sample.tasks);
+          }
+
+          if (Array.isArray(savedReflections)) {
+            setReflections(savedReflections);
+          }
+        } catch (err) {
+          console.error('[AppContext] Error loading from cache:', err);
+          setSyncError(err.message);
+        }
+      }
+
+      dataLoadedRef.current = true;
+      setIsLoading(false);
+      console.log('[AppContext] loadData complete, dataLoadedRef=true');
     };
 
     loadData();
@@ -455,6 +425,7 @@ export function AppProvider({ children }) {
     notes: goal.notes,
     milestones: goal.milestones,
     data_points: goal.dataPoints,
+    sort_order: goal.sortOrder ?? 0,
   });
 
   const transformGoalFromDB = (dbGoal) => ({
@@ -470,6 +441,7 @@ export function AppProvider({ children }) {
     notes: dbGoal.notes,
     milestones: dbGoal.milestones || [],
     dataPoints: dbGoal.data_points || [],
+    sortOrder: dbGoal.sort_order ?? 0,
   });
 
   const transformTaskToDB = (task) => ({
@@ -492,6 +464,7 @@ export function AppProvider({ children }) {
     reminder_minutes: task.reminderMinutes || 15,
     linked_goal_id: task.linkedGoalId,
     data_points: task.dataPoints,
+    sort_order: task.sortOrder ?? 0,
   });
 
   const transformTaskFromDB = (dbTask) => ({
@@ -515,6 +488,7 @@ export function AppProvider({ children }) {
     linkedGoalId: dbTask.linked_goal_id,
     createdAt: dbTask.created_at,
     dataPoints: dbTask.data_points || [],
+    sortOrder: dbTask.sort_order ?? 0,
   });
 
   // Reflection transform functions
@@ -628,6 +602,100 @@ export function AppProvider({ children }) {
     createdAt: dbRoutine.created_at,
   });
 
+  // ============================================
+  // UNDO / REDO SYSTEM
+  // ============================================
+  const pushUndo = useCallback(() => {
+    const snapshot = { goals: goals.map(g => ({ ...g })), tasks: tasks.map(t => ({ ...t })) };
+    setUndoStack(prev => {
+      const stack = [...prev, snapshot];
+      if (stack.length > MAX_UNDO_HISTORY) stack.shift();
+      return stack;
+    });
+    setRedoStack([]);
+  }, [goals, tasks]);
+
+  const syncFullState = useCallback(async (newGoals, newTasks) => {
+    if (!isConfigured || !user || !supabase) return;
+    try {
+      setIsSyncing(true);
+      const now = new Date().toISOString();
+
+      // Get current cloud IDs
+      const cloudGoalsRes = await goalService.getAll(user.id);
+      const cloudTasksRes = await taskService.getAll(user.id);
+      const localGoalIds = new Set(newGoals.map(g => g.id));
+      const localTaskIds = new Set(newTasks.map(t => t.id));
+
+      // Delete cloud items not in snapshot
+      for (const cg of (cloudGoalsRes.data || [])) {
+        if (!localGoalIds.has(cg.id)) await goalService.delete(cg.id);
+      }
+      for (const ct of (cloudTasksRes.data || [])) {
+        if (!localTaskIds.has(ct.id)) await taskService.delete(ct.id);
+      }
+
+      // Upsert all snapshot items
+      for (const goal of newGoals) {
+        await supabase.from('goals').upsert({
+          ...transformGoalToDB(goal),
+          user_id: user.id,
+          updated_at: now,
+        }, { onConflict: 'id' });
+      }
+      for (const task of newTasks) {
+        await supabase.from('tasks').upsert({
+          ...transformTaskToDB(task),
+          user_id: user.id,
+          linked_goal_id: null,
+          updated_at: now,
+        }, { onConflict: 'id' });
+      }
+      // Update linked_goal_id separately to avoid FK issues
+      for (const task of newTasks) {
+        if (task.linkedGoalId) {
+          await supabase.from('tasks').update({ linked_goal_id: task.linkedGoalId }).eq('id', task.id);
+        }
+      }
+    } catch (err) {
+      console.error('[Undo/Redo] Cloud sync failed:', err);
+      setSyncError(err.message);
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [isConfigured, user]);
+
+  const undo = useCallback(async () => {
+    if (undoStack.length === 0) return;
+    const currentSnapshot = { goals: goals.map(g => ({ ...g })), tasks: tasks.map(t => ({ ...t })) };
+    const previousSnapshot = undoStack[undoStack.length - 1];
+
+    setUndoStack(prev => prev.slice(0, -1));
+    setRedoStack(prev => [...prev, currentSnapshot]);
+    setGoals(previousSnapshot.goals);
+    setTasks(previousSnapshot.tasks);
+
+    // Sync restored state to cloud
+    syncFullState(previousSnapshot.goals, previousSnapshot.tasks);
+  }, [undoStack, goals, tasks, syncFullState]);
+
+  const redo = useCallback(async () => {
+    if (redoStack.length === 0) return;
+    const currentSnapshot = { goals: goals.map(g => ({ ...g })), tasks: tasks.map(t => ({ ...t })) };
+    const nextSnapshot = redoStack[redoStack.length - 1];
+
+    setRedoStack(prev => prev.slice(0, -1));
+    setUndoStack(prev => [...prev, currentSnapshot]);
+    setGoals(nextSnapshot.goals);
+    setTasks(nextSnapshot.tasks);
+
+    // Sync restored state to cloud
+    syncFullState(nextSnapshot.goals, nextSnapshot.tasks);
+  }, [redoStack, goals, tasks, syncFullState]);
+
+  const canUndo = undoStack.length > 0;
+  const canRedo = redoStack.length > 0;
+
   // Calculate habit streak (supports both recurring completedDates and legacy completed flag)
   const calculateHabitStreak = useCallback((habitTitle) => {
     const allDates = [];
@@ -684,6 +752,7 @@ export function AppProvider({ children }) {
 
   // Goal CRUD operations
   const addGoal = async (goal) => {
+    pushUndo();
     const newGoal = {
       id: uuidv4(),
       createdAt: new Date().toISOString(),
@@ -718,6 +787,7 @@ export function AppProvider({ children }) {
   };
 
   const updateGoal = async (id, updates) => {
+    pushUndo();
     const oldGoal = goals.find((g) => g.id === id);
 
     // Optimistic update + immediate localStorage save
@@ -757,6 +827,7 @@ export function AppProvider({ children }) {
   };
 
   const deleteGoal = async (id) => {
+    pushUndo();
     // Optimistic update + immediate localStorage save
     setGoals((prev) => {
       const updated = prev.filter((goal) => goal.id !== id);
@@ -780,8 +851,15 @@ export function AppProvider({ children }) {
   };
 
   const reorderGoals = (newOrder) => {
+    pushUndo();
     setGoals(newOrder);
     saveGoalsToLocalStorage(newOrder);
+    // Sync sort order to cloud
+    if (isConfigured && user) {
+      goalService.updateSortOrder(newOrder, user.id).catch(err => {
+        console.error('[CloudSync] Reorder goals failed:', err);
+      });
+    }
   };
 
   // Helper: immediately persist tasks to localStorage with verification
@@ -805,6 +883,7 @@ export function AppProvider({ children }) {
 
   // Task CRUD operations
   const addTask = async (task) => {
+    pushUndo();
     const newTask = {
       id: uuidv4(),
       createdAt: new Date().toISOString(),
@@ -852,6 +931,7 @@ export function AppProvider({ children }) {
   };
 
   const updateTask = async (id, updates) => {
+    pushUndo();
     const oldTask = tasks.find((t) => t.id === id);
 
     // Optimistic update + immediate localStorage save
@@ -888,6 +968,7 @@ export function AppProvider({ children }) {
   };
 
   const deleteTask = async (id) => {
+    pushUndo();
     const deletedTask = tasks.find((t) => t.id === id);
 
     // Optimistic update + immediate localStorage save
@@ -919,6 +1000,7 @@ export function AppProvider({ children }) {
   };
 
   const toggleTaskComplete = async (id) => {
+    pushUndo();
     // Detect virtual recurring instance IDs (format: parentId_YYYY-MM-DD)
     const parsed = parseVirtualId(id);
     const realId = parsed ? parsed.parentId : id;
@@ -1030,8 +1112,15 @@ export function AppProvider({ children }) {
   };
 
   const reorderTasks = (newOrder) => {
+    pushUndo();
     setTasks(newOrder);
     saveTasksToLocalStorage(newOrder);
+    // Sync sort order to cloud
+    if (isConfigured && user) {
+      taskService.updateSortOrder(newOrder, user.id).catch(err => {
+        console.error('[CloudSync] Reorder tasks failed:', err);
+      });
+    }
   };
 
   // Reflection CRUD operations
@@ -1860,6 +1949,12 @@ export function AppProvider({ children }) {
     importAllData,
     syncFromCloud,
     pushAllToCloud,
+
+    // Undo/Redo
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   };
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

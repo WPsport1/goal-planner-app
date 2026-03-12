@@ -31,6 +31,8 @@ import {
   PenLine,
   Activity,
   CalendarCheck,
+  Undo2,
+  Redo2,
 } from 'lucide-react';
 import AuthPage from '../Auth/AuthPage';
 import './MainLayout.css';
@@ -57,6 +59,10 @@ export default function MainLayout({ leftPanel, rightPanel }) {
     setShowDataManagement,
     collapsedSections,
     toggleSectionCollapse,
+    undo,
+    redo,
+    canUndo,
+    canRedo,
   } = useApp();
 
   const { user, signOut, isConfigured } = useAuth();
@@ -117,6 +123,20 @@ export default function MainLayout({ leftPanel, rightPanel }) {
         setActiveTab('planner');
       }
 
+      // Ctrl/Cmd + Shift + Z: Redo
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key === 'z') {
+        event.preventDefault();
+        if (canRedo) redo();
+        return;
+      }
+
+      // Ctrl/Cmd + Z: Undo
+      if ((event.ctrlKey || event.metaKey) && event.key === 'z') {
+        event.preventDefault();
+        if (canUndo) undo();
+        return;
+      }
+
       // Escape: Exit fullscreen
       if (event.key === 'Escape' && (leftPanelFullscreen || rightPanelFullscreen)) {
         exitFullscreen();
@@ -125,7 +145,7 @@ export default function MainLayout({ leftPanel, rightPanel }) {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [setActiveTab, leftPanelFullscreen, rightPanelFullscreen, exitFullscreen]);
+  }, [setActiveTab, leftPanelFullscreen, rightPanelFullscreen, exitFullscreen, undo, redo, canUndo, canRedo]);
 
   const getLayoutClass = () => {
     if (isMobile) return 'layout-mobile';
@@ -190,6 +210,24 @@ export default function MainLayout({ leftPanel, rightPanel }) {
           </button>
         </nav>
         <div className="header-actions">
+          {/* Undo/Redo Buttons — always visible, even on mobile */}
+          <button
+            className="header-action-btn undo-redo-btn"
+            onClick={undo}
+            disabled={!canUndo}
+            title="Undo (Ctrl+Z)"
+          >
+            <Undo2 size={18} />
+          </button>
+          <button
+            className="header-action-btn undo-redo-btn"
+            onClick={redo}
+            disabled={!canRedo}
+            title="Redo (Ctrl+Shift+Z)"
+          >
+            <Redo2 size={18} />
+          </button>
+
           {(leftPanelFullscreen || rightPanelFullscreen) && !isMobile && (
             <button className="fullscreen-exit-btn" onClick={exitFullscreen}>
               <Minimize2 size={18} />
@@ -334,6 +372,18 @@ export default function MainLayout({ leftPanel, rightPanel }) {
 
                 <div className="user-menu-divider" />
 
+                {/* Undo/Redo */}
+                <button className="user-menu-item" onClick={() => { undo(); setShowUserMenu(false); }} disabled={!canUndo}>
+                  <Undo2 size={16} />
+                  <span>Undo</span>
+                </button>
+                <button className="user-menu-item" onClick={() => { redo(); setShowUserMenu(false); }} disabled={!canRedo}>
+                  <Redo2 size={16} />
+                  <span>Redo</span>
+                </button>
+
+                <div className="user-menu-divider" />
+
                 {/* Theme Toggle */}
                 <button className="user-menu-item" onClick={toggleTheme}>
                   {isDark ? <Sun size={16} /> : <Moon size={16} />}
@@ -408,6 +458,14 @@ export default function MainLayout({ leftPanel, rightPanel }) {
                     <div className="shortcut-item">
                       <span>Planner Tab</span>
                       <kbd>Ctrl+2</kbd>
+                    </div>
+                    <div className="shortcut-item">
+                      <span>Undo</span>
+                      <kbd>Ctrl+Z</kbd>
+                    </div>
+                    <div className="shortcut-item">
+                      <span>Redo</span>
+                      <kbd>Ctrl+Shift+Z</kbd>
                     </div>
                     <div className="shortcut-item">
                       <span>Exit Fullscreen</span>
