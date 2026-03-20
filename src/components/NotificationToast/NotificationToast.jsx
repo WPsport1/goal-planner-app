@@ -1,62 +1,56 @@
-import { useState, useEffect } from 'react';
-import { X, Bell, Volume2 } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { X, Bell, AlarmClock, Clock } from 'lucide-react';
+import { playAlarm, stopAlarm } from '../../services/alarmSounds';
+import { snoozeNotification, acknowledgeNotification } from '../../services/notifications';
 import './NotificationToast.css';
 
 export default function NotificationToast() {
   const [notifications, setNotifications] = useState([]);
+  const alarmHandles = useRef(new Map());
 
   useEffect(() => {
     const handleNotification = (event) => {
-      const { title, body } = event.detail;
+      const { title, body, soundType, requireInteraction } = event.detail;
       const id = Date.now();
 
       // Add notification to stack
-      setNotifications((prev) => [...prev, { id, title, body }]);
+      setNotifications((prev) => [...prev, {
+        id,
+        title,
+        body,
+        soundType: soundType || 'default',
+        persistent: requireInteraction !== false,
+        createdAt: Date.now(),
+      }]);
 
-      // Play sound
+      // Play alarm sound (looping for persistent alerts)
       try {
-        // Create an audio context to ensure sound plays
-        const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-        const oscillator = audioContext.createOscillator();
-        const gainNode = audioContext.createGain();
+        const handle = playAlarm(soundType || 'default', 70, requireInteraction !== false);
+        alarmHandles.current.set(id, handle);
 
-        oscillator.connect(gainNode);
-        gainNode.connect(audioContext.destination);
-
-        oscillator.frequency.value = 800;
-        oscillator.type = 'sine';
-        gainNode.gain.value = 0.3;
-
-        oscillator.start();
+        // Auto-stop looping sound after 30 seconds to prevent endless alarm
         setTimeout(() => {
-          oscillator.stop();
-          audioContext.close();
-        }, 200);
-
-        // Second beep
-        setTimeout(() => {
-          const ctx2 = new (window.AudioContext || window.webkitAudioContext)();
-          const osc2 = ctx2.createOscillator();
-          const gain2 = ctx2.createGain();
-          osc2.connect(gain2);
-          gain2.connect(ctx2.destination);
-          osc2.frequency.value = 1000;
-          osc2.type = 'sine';
-          gain2.gain.value = 0.3;
-          osc2.start();
-          setTimeout(() => {
-            osc2.stop();
-            ctx2.close();
-          }, 200);
-        }, 250);
+          const h = alarmHandles.current.get(id);
+          if (h) {
+            h.stop();
+            alarmHandles.current.delete(id);
+          }
+        }, 30000);
       } catch (e) {
-        console.log('Could not play notification sound:', e);
+        console.log('[NotificationToast] Could not play sound:', e);
       }
 
-      // Auto-remove after 10 seconds (but stays visible for important notifications)
-      setTimeout(() => {
-        setNotifications((prev) => prev.filter((n) => n.id !== id));
-      }, 10000);
+      // Auto-remove non-persistent notifications after 10 seconds
+      if (requireInteraction === false) {
+        setTimeout(() => {
+          dismissNotification(id);
+        }, 10000);
+      } else {
+        // Even persistent ones auto-dismiss after 60 seconds
+        setTimeout(() => {
+          dismissNotification(id);
+        }, 60000);
+      }
     };
 
     window.addEventListener('app-notification', handleNotification);
@@ -64,7 +58,39 @@ export default function NotificationToast() {
   }, []);
 
   const dismissNotification = (id) => {
+    // Stop the alarm sound for this notification
+    const handle = alarmHandles.current.get(id);
+    if (handle) {
+      handle.stop();
+      alarmHandles.current.delete(id);
+    }
+
+    // Acknowledge for escalation tracking
+    acknowledgeNotification(id);
+
     setNotifications((prev) => prev.filter((n) => n.id !== id));
+  };
+
+  const handleSnooze = (notification) => {
+    // Stop the alarm sound
+    const handle = alarmHandles.current.get(notification.id);
+    if (handle) {
+      handle.stop();
+      alarmHandles.current.delete(notification.id);
+    }
+
+    // Acknowledge for escalation tracking
+    acknowledgeNotification(notification.id);
+
+    // Schedule snooze
+    snoozeNotification(
+      notification.title,
+      notification.body || '',
+      { soundType: notification.soundType }
+    );
+
+    // Remove from display
+    setNotifications((prev) => prev.filter((n) => n.id !== notification.id));
   };
 
   if (notifications.length === 0) return null;
@@ -74,11 +100,26 @@ export default function NotificationToast() {
       {notifications.map((notification) => (
         <div key={notification.id} className="notification-toast">
           <div className="toast-icon">
-            <Bell size={24} />
+            <AlarmClock size={24} />
           </div>
           <div className="toast-content">
             <h4>{notification.title}</h4>
             {notification.body && <p>{notification.body}</p>}
+            <div className="toast-actions">
+              <button
+                className="toast-snooze-btn"
+                onClick={() => handleSnooze(notification)}
+              >
+                <Clock size={14} />
+                Snooze
+              </button>
+              <button
+                className="toast-dismiss-btn"
+                onClick={() => dismissNotification(notification.id)}
+              >
+                Dismiss
+              </button>
+            </div>
           </div>
           <button
             className="toast-close"

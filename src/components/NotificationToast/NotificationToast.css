@@ -84,10 +84,53 @@
 }
 
 .toast-content p {
-  margin: 0;
+  margin: 0 0 8px 0;
   font-size: 0.875rem;
   color: rgba(255, 255, 255, 0.8);
   line-height: 1.4;
+}
+
+/* Snooze & Dismiss action buttons */
+.toast-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.toast-snooze-btn,
+.toast-dismiss-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.toast-snooze-btn {
+  background: rgba(139, 92, 246, 0.3);
+  color: #c4b5fd;
+  border: 1px solid rgba(139, 92, 246, 0.4);
+}
+
+.toast-snooze-btn:hover {
+  background: rgba(139, 92, 246, 0.5);
+  color: #fff;
+}
+
+.toast-dismiss-btn {
+  background: rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+}
+
+.toast-dismiss-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
 }
 
 .toast-close {
@@ -134,5 +177,11 @@
 
   .toast-content p {
     font-size: 0.8rem;
+  }
+
+  .toast-snooze-btn,
+  .toast-dismiss-btn {
+    padding: 4px 10px;
+    font-size: 0.75rem;
   }
 }

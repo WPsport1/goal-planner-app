@@ -2,33 +2,30 @@
  * Service Worker for Goal Planner App
  *
  * Handles:
- * - Push notifications
- * - Background sync
- * - Scheduled notification checking
+ * - Push notifications with Snooze/Open actions
+ * - Background notification checking
  * - Offline support
  */
 
-const CACHE_NAME = 'goal-planner-v1';
-const NOTIFICATION_CHECK_INTERVAL = 60000; // 1 minute
+const CACHE_NAME = 'goal-planner-v2';
+const NOTIFICATION_CHECK_INTERVAL = 30000; // 30 seconds
 
-// Install event - cache essential files
+// Install event
 self.addEventListener('install', (event) => {
-  console.log('Service Worker installing...');
+  console.log('[SW] Installing...');
   self.skipWaiting();
 });
 
-// Activate event - cleanup old caches
+// Activate event
 self.addEventListener('activate', (event) => {
-  console.log('Service Worker activating...');
+  console.log('[SW] Activating...');
   event.waitUntil(clients.claim());
-
-  // Start periodic notification check
   startNotificationChecker();
 });
 
-// Push notification received from server (Firebase)
+// Push notification received from server
 self.addEventListener('push', (event) => {
-  console.log('Push notification received:', event);
+  console.log('[SW] Push received:', event);
 
   let data = {
     title: 'Goal Planner',
@@ -54,9 +51,9 @@ self.addEventListener('push', (event) => {
     tag: data.tag || 'goal-planner-push',
     renotify: true,
     data: data.data || {},
-    actions: data.actions || [
+    actions: [
       { action: 'open', title: 'Open App' },
-      { action: 'snooze', title: 'Snooze 10min' },
+      { action: 'snooze', title: 'Snooze' },
     ],
   };
 
@@ -67,26 +64,39 @@ self.addEventListener('push', (event) => {
 
 // Notification click handler
 self.addEventListener('notificationclick', (event) => {
-  console.log('Notification clicked:', event);
-
   event.notification.close();
 
   const action = event.action;
   const data = event.notification.data || {};
 
   if (action === 'snooze') {
-    // Snooze for 10 minutes
-    const snoozeTime = new Date(Date.now() + 10 * 60 * 1000);
-    scheduleSnoozeNotification(event.notification.title, event.notification.body, snoozeTime, data);
+    // Read snooze duration from settings (default 10 min)
+    const snoozeMins = data.snoozeDuration || 10;
+    const snoozeTime = new Date(Date.now() + snoozeMins * 60 * 1000);
+
+    // Tell main thread to schedule a snoozed notification
+    self.clients.matchAll().then(clients => {
+      clients.forEach(client => {
+        client.postMessage({
+          type: 'SCHEDULE_SNOOZE',
+          notification: {
+            title: event.notification.title,
+            body: `Snoozed: ${event.notification.body}`,
+            triggerAt: snoozeTime.toISOString(),
+            sound: true,
+            soundType: data.soundType || 'default',
+            data,
+          }
+        });
+      });
+    });
   } else {
     // Open or focus the app
     event.waitUntil(
       clients.matchAll({ type: 'window', includeUncontrolled: true })
         .then((windowClients) => {
-          // Check if app is already open
           for (const client of windowClients) {
             if (client.url.includes(self.location.origin) && 'focus' in client) {
-              // Focus existing window and navigate if needed
               client.focus();
               if (data.url) {
                 client.navigate(data.url);
@@ -94,34 +104,13 @@ self.addEventListener('notificationclick', (event) => {
               return;
             }
           }
-
-          // Open new window
           if (clients.openWindow) {
-            const url = data.url || '/';
-            return clients.openWindow(url);
+            return clients.openWindow(data.url || '/');
           }
         })
     );
   }
 });
-
-// Schedule a snooze notification
-function scheduleSnoozeNotification(title, body, triggerTime, data) {
-  // Store in IndexedDB or use the main thread
-  self.clients.matchAll().then(clients => {
-    clients.forEach(client => {
-      client.postMessage({
-        type: 'SCHEDULE_SNOOZE',
-        notification: {
-          title: `⏰ ${title}`,
-          body: `Snoozed: ${body}`,
-          triggerAt: triggerTime.toISOString(),
-          data,
-        }
-      });
-    });
-  });
-}
 
 // Periodic notification checker
 let notificationCheckerInterval = null;
@@ -135,16 +124,12 @@ function startNotificationChecker() {
     checkScheduledNotifications();
   }, NOTIFICATION_CHECK_INTERVAL);
 
-  // Check immediately
   checkScheduledNotifications();
 }
 
-// Check for due notifications
 async function checkScheduledNotifications() {
-  // Request the main thread to check notifications
-  const clients = await self.clients.matchAll();
-
-  clients.forEach(client => {
+  const allClients = await self.clients.matchAll();
+  allClients.forEach(client => {
     client.postMessage({ type: 'CHECK_NOTIFICATIONS' });
   });
 }
@@ -159,12 +144,12 @@ self.addEventListener('message', (event) => {
         body: data.body,
         icon: data.icon || '/vite.svg',
         badge: '/vite.svg',
-        vibrate: data.vibrate || [200, 100, 200],
+        vibrate: data.vibrate || [200, 100, 200, 100, 200],
         requireInteraction: data.requireInteraction !== false,
         tag: data.tag || 'goal-planner',
         renotify: true,
         data: data.data,
-        actions: data.actions || [
+        actions: [
           { action: 'open', title: 'Open' },
           { action: 'snooze', title: 'Snooze' },
         ],
@@ -176,7 +161,7 @@ self.addEventListener('message', (event) => {
       break;
 
     default:
-      console.log('Unknown message type:', type);
+      break;
   }
 });
 
@@ -187,19 +172,11 @@ self.addEventListener('periodicsync', (event) => {
   }
 });
 
-// Background sync for offline notification scheduling
+// Background sync
 self.addEventListener('sync', (event) => {
   if (event.tag === 'sync-notifications') {
-    event.waitUntil(syncNotifications());
+    event.waitUntil(checkScheduledNotifications());
   }
 });
 
-async function syncNotifications() {
-  // Sync notification schedules when coming back online
-  const clients = await self.clients.matchAll();
-  clients.forEach(client => {
-    client.postMessage({ type: 'SYNC_NOTIFICATIONS' });
-  });
-}
-
-console.log('Service Worker loaded');
+console.log('[SW] Service Worker loaded');

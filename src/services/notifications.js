@@ -2,16 +2,20 @@
  * Push Notification Service
  *
  * This service handles:
- * - Firebase Cloud Messaging setup
  * - Permission requests
- * - Token management
- * - Local notification scheduling
- * - Notification preferences
+ * - Service worker registration
+ * - Local notification scheduling & triggering
+ * - Sound playback via Web Audio (alarmSounds.js)
+ * - Recurring notification rescheduling
+ * - Quiet hours enforcement
+ * - Escalation (re-alert if not acknowledged)
  */
+
+import { playAlarm, stopAlarm } from './alarmSounds';
 
 // Check if notifications are supported
 export const isNotificationSupported = () => {
-  return 'Notification' in window && 'serviceWorker' in navigator && 'PushManager' in window;
+  return 'Notification' in window && 'serviceWorker' in navigator;
 };
 
 // Get current permission status
@@ -48,17 +52,56 @@ export const registerServiceWorker = async () => {
     const registration = await navigator.serviceWorker.register('/sw.js', {
       scope: '/'
     });
-    console.log('Service Worker registered:', registration);
+    console.log('[Notifications] Service Worker registered:', registration);
     return { success: true, registration };
   } catch (error) {
-    console.error('Service Worker registration failed:', error);
+    console.error('[Notifications] Service Worker registration failed:', error);
     return { success: false, error: error.message };
   }
 };
 
+// Get notification settings from localStorage
+function getSettings() {
+  try {
+    return JSON.parse(localStorage.getItem('notificationSettings') || '{}');
+  } catch {
+    return {};
+  }
+}
+
+// Check if currently in quiet hours
+function isQuietHours() {
+  const settings = getSettings();
+  if (!settings.quietHoursEnabled) return false;
+
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const [startH, startM] = (settings.quietHoursStart || '22:00').split(':').map(Number);
+  const [endH, endM] = (settings.quietHoursEnd || '07:00').split(':').map(Number);
+  const startMinutes = startH * 60 + startM;
+  const endMinutes = endH * 60 + endM;
+
+  if (startMinutes <= endMinutes) {
+    return currentMinutes >= startMinutes && currentMinutes < endMinutes;
+  }
+  // Wraps midnight (e.g., 22:00 - 07:00)
+  return currentMinutes >= startMinutes || currentMinutes < endMinutes;
+}
+
 // Show a local notification (for when app is open)
 export const showLocalNotification = (title, options = {}) => {
   const body = options.body || '';
+
+  // Always dispatch in-app event (NotificationToast listens for this)
+  window.dispatchEvent(new CustomEvent('app-notification', {
+    detail: {
+      title,
+      body,
+      options,
+      soundType: options.soundType || 'default',
+      requireInteraction: options.requireInteraction !== false,
+    }
+  }));
 
   // Method 1: Try native Notification API
   if (getPermissionStatus() === 'granted') {
@@ -75,32 +118,13 @@ export const showLocalNotification = (title, options = {}) => {
 
     try {
       const notification = new Notification(title, defaultOptions);
-      console.log('Notification shown:', title);
-
-      // Also dispatch a custom event for in-app display
-      window.dispatchEvent(new CustomEvent('app-notification', {
-        detail: { title, body, options }
-      }));
-
       return notification;
     } catch (error) {
-      console.error('Error showing notification:', error);
+      console.error('[Notifications] Native notification failed:', error);
     }
   }
 
-  // Method 2: Always show in-app notification as backup
-  window.dispatchEvent(new CustomEvent('app-notification', {
-    detail: { title, body, options }
-  }));
-
-  // Method 3: For critical notifications, use alert as ultimate fallback
-  if (options.critical) {
-    setTimeout(() => {
-      alert(`${title}\n\n${body}`);
-    }, 100);
-  }
-
-  // Method 4: Try via service worker
+  // Method 2: Try via service worker (needed for iOS PWA)
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.ready.then(registration => {
       registration.showNotification(title, {
@@ -111,30 +135,28 @@ export const showLocalNotification = (title, options = {}) => {
         requireInteraction: true,
         tag: 'goal-planner-sw-' + Date.now(),
         renotify: true,
+        actions: [
+          { action: 'open', title: 'Open' },
+          { action: 'snooze', title: 'Snooze' },
+        ],
       });
-    }).catch(err => console.error('SW notification failed:', err));
+    }).catch(err => console.error('[Notifications] SW notification failed:', err));
   }
 };
 
-// Play notification sound
-export const playNotificationSound = (soundType = 'default') => {
-  const sounds = {
-    default: '/sounds/notification.mp3',
-    alarm: '/sounds/alarm.mp3',
-    gentle: '/sounds/gentle.mp3',
-    urgent: '/sounds/urgent.mp3',
-  };
-
-  const audio = new Audio(sounds[soundType] || sounds.default);
-  audio.volume = 0.7;
-
-  // Try to play, handle autoplay restrictions
-  audio.play().catch(err => {
-    console.warn('Could not play notification sound:', err);
-  });
+// Play notification sound using Web Audio synthesizer
+export const playNotificationSound = (soundType = 'default', volume = 70, loop = false) => {
+  const settings = getSettings();
+  const vol = settings.soundVolume || volume;
+  return playAlarm(soundType, vol, loop);
 };
 
-// Schedule a notification (stores in localStorage, checked by service worker)
+// Stop currently playing notification sound
+export const stopNotificationSound = () => {
+  stopAlarm();
+};
+
+// Schedule a notification (stores in localStorage, checked periodically)
 export const scheduleNotification = (notification) => {
   const scheduled = getScheduledNotifications();
   const newNotification = {
@@ -169,10 +191,62 @@ export const clearScheduledNotifications = () => {
   localStorage.setItem('scheduledNotifications', JSON.stringify([]));
 };
 
+// Reschedule a recurring notification for its next occurrence
+function rescheduleRecurring(notification) {
+  const trigger = new Date(notification.triggerAt);
+  let next;
+
+  switch (notification.recurrenceType) {
+    case 'daily':
+      next = new Date(trigger);
+      next.setDate(next.getDate() + 1);
+      break;
+    case 'weekly':
+      next = new Date(trigger);
+      next.setDate(next.getDate() + 7);
+      break;
+    case 'weekdays': {
+      next = new Date(trigger);
+      do {
+        next.setDate(next.getDate() + 1);
+      } while (next.getDay() === 0 || next.getDay() === 6);
+      break;
+    }
+    case 'monthly':
+      next = new Date(trigger);
+      next.setMonth(next.getMonth() + 1);
+      break;
+    default:
+      next = new Date(trigger);
+      next.setDate(next.getDate() + 1);
+  }
+
+  // Update the notification in storage
+  const scheduled = getScheduledNotifications();
+  const updated = scheduled.map(n => {
+    if (n.id === notification.id) {
+      return { ...n, triggerAt: next.toISOString(), triggered: false };
+    }
+    return n;
+  });
+  localStorage.setItem('scheduledNotifications', JSON.stringify(updated));
+}
+
+// Track unacknowledged notifications for escalation
+const unacknowledged = new Map();
+
+// Acknowledge a notification (called from NotificationToast on dismiss/snooze)
+export const acknowledgeNotification = (id) => {
+  unacknowledged.delete(id);
+};
+
 // Check and trigger due notifications (called periodically)
 export const checkDueNotifications = () => {
+  if (isQuietHours()) return; // Respect quiet hours
+
   const now = new Date();
   const scheduled = getScheduledNotifications();
+  const settings = getSettings();
 
   scheduled.forEach(notification => {
     const triggerTime = new Date(notification.triggerAt);
@@ -183,22 +257,71 @@ export const checkDueNotifications = () => {
         body: notification.body,
         tag: notification.id,
         data: notification.data,
+        soundType: notification.soundType || 'default',
+        requireInteraction: true,
       });
 
       // Play sound if enabled
-      if (notification.sound) {
-        playNotificationSound(notification.soundType);
+      if (notification.sound !== false) {
+        playNotificationSound(notification.soundType || 'default');
       }
 
-      // Mark as triggered or remove
+      // Track for escalation
+      if (settings.escalationEnabled) {
+        unacknowledged.set(notification.id, {
+          ...notification,
+          firedAt: Date.now(),
+        });
+      }
+
+      // Handle recurring vs one-time
       if (notification.recurring) {
-        // Reschedule for next occurrence
-        // Implementation depends on recurrence type
+        rescheduleRecurring(notification);
       } else {
         removeScheduledNotification(notification.id);
       }
     }
   });
+
+  // Escalation check: re-alert for unacknowledged notifications
+  if (settings.escalationEnabled) {
+    const escalateAfterMs = (settings.escalationAfterMinutes || 5) * 60 * 1000;
+
+    unacknowledged.forEach((notif, id) => {
+      if (Date.now() - notif.firedAt > escalateAfterMs) {
+        // Escalate with urgent sound
+        showLocalNotification(`${notif.title}`, {
+          body: `REMINDER: ${notif.body || 'You have an unacknowledged alert!'}`,
+          tag: `escalation-${id}`,
+          soundType: settings.escalationSound || 'urgent',
+          requireInteraction: true,
+        });
+        playNotificationSound(settings.escalationSound || 'urgent');
+
+        // Reset timer so it escalates again if still not acknowledged
+        unacknowledged.set(id, { ...notif, firedAt: Date.now() });
+      }
+    });
+  }
+};
+
+// Snooze a notification (reschedule for N minutes from now)
+export const snoozeNotification = (title, body, data = {}) => {
+  const settings = getSettings();
+  const snoozeMins = settings.snoozeDuration || 10;
+  const snoozeTime = new Date(Date.now() + snoozeMins * 60 * 1000);
+
+  scheduleNotification({
+    type: 'snooze',
+    title: `${title}`,
+    body: `Snoozed: ${body}`,
+    triggerAt: snoozeTime.toISOString(),
+    sound: true,
+    soundType: data.soundType || 'default',
+    data,
+  });
+
+  console.log(`[Notifications] Snoozed for ${snoozeMins} minutes`);
 };
 
 // Notification types for the app
@@ -224,7 +347,7 @@ export const createTaskReminder = (task, minutesBefore = 15) => {
 
   return scheduleNotification({
     type: NotificationType.TASK_REMINDER,
-    title: `⏰ ${task.title}`,
+    title: `Task: ${task.title}`,
     body: `Starting in ${minutesBefore} minutes`,
     triggerAt: triggerTime.toISOString(),
     sound: true,
@@ -241,12 +364,12 @@ export const createHabitReminder = (habit, time) => {
   triggerTime.setHours(parseInt(hours), parseInt(minutes), 0, 0);
 
   if (triggerTime <= new Date()) {
-    triggerTime.setDate(triggerTime.getDate() + 1); // Schedule for tomorrow
+    triggerTime.setDate(triggerTime.getDate() + 1);
   }
 
   return scheduleNotification({
     type: NotificationType.HABIT_REMINDER,
-    title: `🔥 Time for: ${habit.title}`,
+    title: `Time for: ${habit.title}`,
     body: 'Keep your streak going!',
     triggerAt: triggerTime.toISOString(),
     sound: true,
@@ -270,7 +393,7 @@ export const createMorningRoutineReminder = (time) => {
 
   return scheduleNotification({
     type: NotificationType.MORNING_ROUTINE,
-    title: '🌅 Good Morning!',
+    title: 'Good Morning!',
     body: 'Time to start your morning routine',
     triggerAt: triggerTime.toISOString(),
     sound: true,
@@ -293,7 +416,7 @@ export const createNightRoutineReminder = (time) => {
 
   return scheduleNotification({
     type: NotificationType.NIGHT_ROUTINE,
-    title: '🌙 Wind Down Time',
+    title: 'Wind Down Time',
     body: 'Start your nighttime routine',
     triggerAt: triggerTime.toISOString(),
     sound: true,
@@ -316,7 +439,7 @@ export const createReflectionReminder = (time) => {
 
   return scheduleNotification({
     type: NotificationType.REFLECTION_PROMPT,
-    title: '✨ Daily Reflection',
+    title: 'Daily Reflection',
     body: 'Take a moment to reflect on your day',
     triggerAt: triggerTime.toISOString(),
     sound: true,
@@ -329,18 +452,31 @@ export const createReflectionReminder = (time) => {
 // Initialize notification system
 export const initializeNotifications = async () => {
   if (!isNotificationSupported()) {
-    console.warn('Notifications not supported');
+    console.warn('[Notifications] Not supported');
     return { success: false, error: 'Not supported' };
   }
 
   // Register service worker
   const swResult = await registerServiceWorker();
   if (!swResult.success) {
-    console.warn('Service worker registration failed:', swResult.error);
+    console.warn('[Notifications] Service worker registration failed:', swResult.error);
   }
 
-  // Start checking for due notifications every minute
-  setInterval(checkDueNotifications, 60000);
+  // Listen for snooze messages from service worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.addEventListener('message', (event) => {
+      if (event.data?.type === 'SCHEDULE_SNOOZE') {
+        const { notification } = event.data;
+        scheduleNotification(notification);
+      }
+      if (event.data?.type === 'CHECK_NOTIFICATIONS') {
+        checkDueNotifications();
+      }
+    });
+  }
+
+  // Start checking for due notifications every 30 seconds (was 60s)
+  setInterval(checkDueNotifications, 30000);
 
   // Check immediately
   checkDueNotifications();
@@ -356,11 +492,14 @@ export default {
   registerServiceWorker,
   showLocalNotification,
   playNotificationSound,
+  stopNotificationSound,
   scheduleNotification,
   getScheduledNotifications,
   removeScheduledNotification,
   clearScheduledNotifications,
   checkDueNotifications,
+  snoozeNotification,
+  acknowledgeNotification,
   createTaskReminder,
   createHabitReminder,
   createMorningRoutineReminder,

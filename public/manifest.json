@@ -1,0 +1,21 @@
+{
+  "name": "Goal Planner",
+  "short_name": "GoalPlanner",
+  "description": "Plan your goals, tasks, habits, and routines",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0a1a",
+  "theme_color": "#8b5cf6",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/vite.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "lifestyle"],
+  "lang": "en-US",
+  "scope": "/"
+}
