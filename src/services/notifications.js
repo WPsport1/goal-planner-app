@@ -449,8 +449,17 @@ export const createReflectionReminder = (time) => {
   });
 };
 
+// Track initialization to prevent duplicate intervals/listeners
+let isInitialized = false;
+
 // Initialize notification system
 export const initializeNotifications = async () => {
+  // Idempotent — safe to call multiple times
+  if (isInitialized) {
+    console.log('[Notifications] Already initialized, skipping');
+    return { success: true, alreadyInitialized: true };
+  }
+
   if (!isNotificationSupported()) {
     console.warn('[Notifications] Not supported');
     return { success: false, error: 'Not supported' };
@@ -475,11 +484,14 @@ export const initializeNotifications = async () => {
     });
   }
 
-  // Start checking for due notifications every 30 seconds (was 60s)
-  setInterval(checkDueNotifications, 30000);
+  // Start checking for due notifications every 15 seconds
+  setInterval(checkDueNotifications, 15000);
 
   // Check immediately
   checkDueNotifications();
+
+  isInitialized = true;
+  console.log('[Notifications] System initialized — checking every 15 seconds');
 
   return { success: true };
 };

@@ -3,14 +3,16 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 import { unlockAudio } from './services/alarmSounds'
-import { registerServiceWorker } from './services/notifications'
+import { initializeNotifications } from './services/notifications'
 
-// Register service worker for push notifications and offline support
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    registerServiceWorker();
+// Initialize notification system (registers SW + starts check loop)
+window.addEventListener('load', () => {
+  initializeNotifications().then(result => {
+    console.log('[Main] Notifications initialized:', result);
+  }).catch(err => {
+    console.warn('[Main] Notification init failed:', err);
   });
-}
+});
 
 // iOS audio unlock: first user interaction enables Web Audio playback
 const handleFirstInteraction = () => {

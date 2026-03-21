@@ -14,6 +14,14 @@ import {
 } from '../services/supabase';
 import { isToday, parseISO, startOfDay, subDays, isSameDay, format } from 'date-fns';
 import { parseVirtualId } from '../utils/recurrence';
+import {
+  initializeNotifications,
+  createTaskReminder,
+  removeScheduledNotification,
+  getScheduledNotifications,
+  scheduleNotification,
+  NotificationType,
+} from '../services/notifications';
 
 // ============================================
 // BULLETPROOF localStorage helpers
@@ -298,10 +306,42 @@ export function AppProvider({ children }) {
       dataLoadedRef.current = true;
       setIsLoading(false);
       console.log('[AppContext] loadData complete, dataLoadedRef=true');
+
+      // Initialize notification system (starts 30-second check loop)
+      initializeNotifications().then(() => {
+        console.log('[AppContext] Notification system initialized');
+      }).catch(err => {
+        console.warn('[AppContext] Notification init failed:', err);
+      });
     };
 
     loadData();
   }, []); // No dependencies — load once on mount, period.
+
+  // =============================================
+  // SCHEDULE TASK REMINDERS whenever tasks change
+  // Clears old task reminders and reschedules all active ones
+  // =============================================
+  useEffect(() => {
+    if (isLoading || !dataLoadedRef.current) return;
+
+    // Remove all existing task reminders from the schedule
+    const scheduled = getScheduledNotifications();
+    scheduled.forEach(n => {
+      if (n.type === NotificationType.TASK_REMINDER) {
+        removeScheduledNotification(n.id);
+      }
+    });
+
+    // Schedule reminders for all tasks that have reminder enabled
+    tasks.forEach(task => {
+      if (task.reminder && task.scheduledDate && task.startTime) {
+        createTaskReminder(task, task.reminderMinutes || 15);
+      }
+    });
+
+    console.log('[AppContext] Task reminders rescheduled for', tasks.filter(t => t.reminder).length, 'tasks');
+  }, [tasks, isLoading]);
 
   // =============================================
   // AUTO-SAVE to localStorage (backup, always runs)
