@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
 import { unlockAudio } from './services/alarmSounds'
+import { startKeepAlive } from './services/backgroundAudio'
 import { initializeNotifications } from './services/notifications'
 
 // Initialize notification system (registers SW + starts check loop)
@@ -14,9 +15,17 @@ window.addEventListener('load', () => {
   });
 });
 
-// iOS audio unlock: first user interaction enables Web Audio playback
+// iOS audio unlock + background audio keepalive on first user interaction
+// Both MUST happen inside a user gesture for iOS to allow audio playback
 const handleFirstInteraction = () => {
+  console.log('[Main] First user interaction — unlocking audio + starting keepalive');
+
+  // Unlock Web Audio API (for in-app alarm sounds)
   unlockAudio();
+
+  // Start background audio keepalive (for persistent alarm when screen locked)
+  startKeepAlive();
+
   document.removeEventListener('touchstart', handleFirstInteraction);
   document.removeEventListener('click', handleFirstInteraction);
 };

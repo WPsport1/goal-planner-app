@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { X, Bell, AlarmClock, Clock } from 'lucide-react';
 import { playAlarm, stopAlarm } from '../../services/alarmSounds';
+import { startAlarm, stopAlarmAudio, isAlarmActive } from '../../services/backgroundAudio';
 import { snoozeNotification, acknowledgeNotification } from '../../services/notifications';
 import './NotificationToast.css';
 
@@ -13,6 +14,8 @@ export default function NotificationToast() {
       const { title, body, soundType, requireInteraction } = event.detail;
       const id = Date.now();
 
+      console.log('[NotificationToast] Received notification:', title);
+
       // Add notification to stack
       setNotifications((prev) => [...prev, {
         id,
@@ -23,12 +26,29 @@ export default function NotificationToast() {
         createdAt: Date.now(),
       }]);
 
-      // Play alarm sound (looping for persistent alerts)
+      // Play alarm sound using BOTH systems for maximum reliability:
+      // 1. Background Audio (<audio> element) — persists when screen locked
+      // 2. Web Audio API — immediate, works when app is in foreground
+
+      // System 1: Background audio alarm (persists in background on iOS)
+      startAlarm(soundType || 'default', 80, (action) => {
+        // This callback fires when user interacts via lock screen media controls
+        console.log('[NotificationToast] Lock screen action:', action);
+        if (action === 'snooze') {
+          handleSnoozeById(id, title, body, soundType);
+        } else {
+          dismissNotification(id);
+        }
+      }).catch(e => {
+        console.log('[NotificationToast] Background audio alarm failed:', e);
+      });
+
+      // System 2: Web Audio API alarm (works when app is in foreground)
       try {
         const handle = playAlarm(soundType || 'default', 70, requireInteraction !== false);
         alarmHandles.current.set(id, handle);
 
-        // Auto-stop looping sound after 30 seconds to prevent endless alarm
+        // Auto-stop Web Audio after 30 seconds (background audio keeps going)
         setTimeout(() => {
           const h = alarmHandles.current.get(id);
           if (h) {
@@ -37,20 +57,18 @@ export default function NotificationToast() {
           }
         }, 30000);
       } catch (e) {
-        console.log('[NotificationToast] Could not play sound:', e);
+        console.log('[NotificationToast] Web Audio alarm failed:', e);
       }
 
       // Auto-remove non-persistent notifications after 10 seconds
+      // But persistent ones stay until dismissed (no auto-dismiss!)
       if (requireInteraction === false) {
         setTimeout(() => {
           dismissNotification(id);
         }, 10000);
-      } else {
-        // Even persistent ones auto-dismiss after 60 seconds
-        setTimeout(() => {
-          dismissNotification(id);
-        }, 60000);
       }
+      // NOTE: Persistent alarms NO LONGER auto-dismiss after 60 seconds.
+      // They ring until the user taps Snooze or Dismiss.
     };
 
     window.addEventListener('app-notification', handleNotification);
@@ -58,12 +76,15 @@ export default function NotificationToast() {
   }, []);
 
   const dismissNotification = (id) => {
-    // Stop the alarm sound for this notification
+    // Stop Web Audio alarm for this notification
     const handle = alarmHandles.current.get(id);
     if (handle) {
       handle.stop();
       alarmHandles.current.delete(id);
     }
+
+    // Stop background audio alarm
+    stopAlarmAudio();
 
     // Acknowledge for escalation tracking
     acknowledgeNotification(id);
@@ -71,26 +92,27 @@ export default function NotificationToast() {
     setNotifications((prev) => prev.filter((n) => n.id !== id));
   };
 
-  const handleSnooze = (notification) => {
-    // Stop the alarm sound
-    const handle = alarmHandles.current.get(notification.id);
+  const handleSnoozeById = (id, title, body, soundType) => {
+    // Stop all alarms
+    const handle = alarmHandles.current.get(id);
     if (handle) {
       handle.stop();
-      alarmHandles.current.delete(notification.id);
+      alarmHandles.current.delete(id);
     }
+    stopAlarmAudio();
 
-    // Acknowledge for escalation tracking
-    acknowledgeNotification(notification.id);
+    acknowledgeNotification(id);
+    snoozeNotification(title, body || '', { soundType });
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+  };
 
-    // Schedule snooze
-    snoozeNotification(
+  const handleSnooze = (notification) => {
+    handleSnoozeById(
+      notification.id,
       notification.title,
-      notification.body || '',
-      { soundType: notification.soundType }
+      notification.body,
+      notification.soundType
     );
-
-    // Remove from display
-    setNotifications((prev) => prev.filter((n) => n.id !== notification.id));
   };
 
   if (notifications.length === 0) return null;

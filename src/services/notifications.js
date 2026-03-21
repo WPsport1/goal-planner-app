@@ -565,6 +565,24 @@ export const initializeNotifications = async () => {
       if (event.data?.type === 'CHECK_NOTIFICATIONS') {
         checkDueNotifications();
       }
+      if (event.data?.type === 'ALARM_OPENED') {
+        // User tapped the push notification — show in-app alarm with sound
+        const { title, body, soundType } = event.data;
+        showLocalNotification(title, {
+          body,
+          soundType: soundType || 'default',
+          requireInteraction: true,
+        });
+      }
+      if (event.data?.type === 'DISMISS_ALARM') {
+        // User dismissed from notification — stop all alarms
+        import('./backgroundAudio.js').then(({ stopAlarmAudio }) => {
+          stopAlarmAudio();
+        });
+        import('./alarmSounds.js').then(({ stopAlarm }) => {
+          stopAlarm();
+        });
+      }
     });
   }
 

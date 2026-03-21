@@ -2,34 +2,36 @@
  * Service Worker for Goal Planner App
  *
  * Handles:
- * - Push notifications with Snooze/Open actions
- * - Background notification checking
- * - Offline support
+ * - Web Push notifications (server-sent, works with screen locked)
+ * - Notification click/action handling (Snooze, Dismiss, Open)
+ * - Background notification checking (tells main thread to check)
  */
 
-const CACHE_NAME = 'goal-planner-v2';
-const NOTIFICATION_CHECK_INTERVAL = 30000; // 30 seconds
+const CACHE_NAME = 'goal-planner-v3';
 
 // Install event
 self.addEventListener('install', (event) => {
-  console.log('[SW] Installing...');
+  console.log('[SW] Installing v3...');
   self.skipWaiting();
 });
 
 // Activate event
 self.addEventListener('activate', (event) => {
-  console.log('[SW] Activating...');
+  console.log('[SW] Activating v3...');
   event.waitUntil(clients.claim());
   startNotificationChecker();
 });
 
-// Push notification received from server
+// ============================================
+// PUSH NOTIFICATION RECEIVED (from server)
+// This fires even when the app is closed / screen locked!
+// ============================================
 self.addEventListener('push', (event) => {
-  console.log('[SW] Push received:', event);
+  console.log('[SW] Push received');
 
   let data = {
     title: 'Goal Planner',
-    body: 'You have a new notification',
+    body: 'You have a reminder!',
     icon: '/vite.svg',
     badge: '/vite.svg',
   };
@@ -46,14 +48,15 @@ self.addEventListener('push', (event) => {
     body: data.body,
     icon: data.icon || '/vite.svg',
     badge: data.badge || '/vite.svg',
-    vibrate: [200, 100, 200, 100, 200],
-    requireInteraction: true,
-    tag: data.tag || 'goal-planner-push',
+    vibrate: [300, 100, 300, 100, 300, 100, 300], // Strong vibration pattern
+    requireInteraction: true, // Don't auto-dismiss — user must interact
+    tag: data.tag || 'goal-planner-push-' + Date.now(),
     renotify: true,
+    silent: false, // Play system notification sound
     data: data.data || {},
     actions: [
-      { action: 'open', title: 'Open App' },
-      { action: 'snooze', title: 'Snooze' },
+      { action: 'snooze', title: 'Snooze (10 min)' },
+      { action: 'dismiss', title: 'Dismiss' },
     ],
   };
 
@@ -62,7 +65,9 @@ self.addEventListener('push', (event) => {
   );
 });
 
-// Notification click handler
+// ============================================
+// NOTIFICATION CLICK HANDLER
+// ============================================
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
@@ -70,49 +75,76 @@ self.addEventListener('notificationclick', (event) => {
   const data = event.notification.data || {};
 
   if (action === 'snooze') {
-    // Read snooze duration from settings (default 10 min)
+    // Tell main thread to schedule a snoozed notification
     const snoozeMins = data.snoozeDuration || 10;
     const snoozeTime = new Date(Date.now() + snoozeMins * 60 * 1000);
 
-    // Tell main thread to schedule a snoozed notification
-    self.clients.matchAll().then(clients => {
-      clients.forEach(client => {
-        client.postMessage({
-          type: 'SCHEDULE_SNOOZE',
-          notification: {
-            title: event.notification.title,
-            body: `Snoozed: ${event.notification.body}`,
-            triggerAt: snoozeTime.toISOString(),
-            sound: true,
-            soundType: data.soundType || 'default',
-            data,
-          }
-        });
-      });
-    });
-  } else {
-    // Open or focus the app
     event.waitUntil(
-      clients.matchAll({ type: 'window', includeUncontrolled: true })
+      self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
+        clients.forEach(client => {
+          client.postMessage({
+            type: 'SCHEDULE_SNOOZE',
+            notification: {
+              title: event.notification.title,
+              body: `Snoozed: ${event.notification.body}`,
+              triggerAt: snoozeTime.toISOString(),
+              sound: true,
+              soundType: data.soundType || 'default',
+              data,
+            }
+          });
+        });
+
+        // If no clients open, schedule via push again (would need server)
+        if (clients.length === 0) {
+          console.log('[SW] No clients open — snooze will fire when app opens');
+        }
+      })
+    );
+  } else if (action === 'dismiss') {
+    // Tell main thread to acknowledge/dismiss
+    event.waitUntil(
+      self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(clients => {
+        clients.forEach(client => {
+          client.postMessage({
+            type: 'DISMISS_ALARM',
+            notificationId: data.notificationId || event.notification.tag,
+          });
+        });
+      })
+    );
+  } else {
+    // Default: open/focus the app and trigger alarm
+    event.waitUntil(
+      self.clients.matchAll({ type: 'window', includeUncontrolled: true })
         .then((windowClients) => {
+          // Try to focus existing window
           for (const client of windowClients) {
-            if (client.url.includes(self.location.origin) && 'focus' in client) {
+            if ('focus' in client) {
               client.focus();
-              if (data.url) {
-                client.navigate(data.url);
-              }
+              // Tell the app to show the alarm UI
+              client.postMessage({
+                type: 'ALARM_OPENED',
+                title: event.notification.title,
+                body: event.notification.body,
+                soundType: data.soundType || 'default',
+              });
               return;
             }
           }
-          if (clients.openWindow) {
-            return clients.openWindow(data.url || '/');
+          // No window open — open new one
+          if (self.clients.openWindow) {
+            return self.clients.openWindow('/');
           }
         })
     );
   }
 });
 
-// Periodic notification checker
+// ============================================
+// BACKGROUND NOTIFICATION CHECKER
+// Posts CHECK_NOTIFICATIONS to main thread every 15 seconds
+// ============================================
 let notificationCheckerInterval = null;
 
 function startNotificationChecker() {
@@ -122,7 +154,7 @@ function startNotificationChecker() {
 
   notificationCheckerInterval = setInterval(() => {
     checkScheduledNotifications();
-  }, NOTIFICATION_CHECK_INTERVAL);
+  }, 15000);
 
   checkScheduledNotifications();
 }
@@ -134,9 +166,11 @@ async function checkScheduledNotifications() {
   });
 }
 
-// Message handler from main thread
+// ============================================
+// MESSAGE HANDLER (from main thread)
+// ============================================
 self.addEventListener('message', (event) => {
-  const { type, data } = event.data;
+  const { type, data } = event.data || {};
 
   switch (type) {
     case 'SHOW_NOTIFICATION':
@@ -144,14 +178,15 @@ self.addEventListener('message', (event) => {
         body: data.body,
         icon: data.icon || '/vite.svg',
         badge: '/vite.svg',
-        vibrate: data.vibrate || [200, 100, 200, 100, 200],
+        vibrate: data.vibrate || [300, 100, 300, 100, 300],
         requireInteraction: data.requireInteraction !== false,
-        tag: data.tag || 'goal-planner',
+        tag: data.tag || 'goal-planner-' + Date.now(),
         renotify: true,
+        silent: false,
         data: data.data,
         actions: [
-          { action: 'open', title: 'Open' },
           { action: 'snooze', title: 'Snooze' },
+          { action: 'dismiss', title: 'Dismiss' },
         ],
       });
       break;
@@ -165,18 +200,19 @@ self.addEventListener('message', (event) => {
   }
 });
 
-// Periodic sync for notification checking (when supported)
+// ============================================
+// PERIODIC SYNC (when browser supports it)
+// ============================================
 self.addEventListener('periodicsync', (event) => {
   if (event.tag === 'notification-check') {
     event.waitUntil(checkScheduledNotifications());
   }
 });
 
-// Background sync
 self.addEventListener('sync', (event) => {
   if (event.tag === 'sync-notifications') {
     event.waitUntil(checkScheduledNotifications());
   }
 });
 
-console.log('[SW] Service Worker loaded');
+console.log('[SW] Service Worker v3 loaded');
