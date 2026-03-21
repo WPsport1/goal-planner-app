@@ -1,21 +1,30 @@
 /**
- * Push Notification Service
+ * Notification & Alarm Service
  *
  * This service handles:
- * - Permission requests
- * - Service worker registration
- * - Local notification scheduling & triggering
- * - Sound playback via Web Audio (alarmSounds.js)
+ * - In-app toast notifications (works on ALL devices, no permission needed)
+ * - Native push notifications (when supported + permission granted)
+ * - Alarm sound playback via Web Audio (alarmSounds.js)
+ * - Scheduled notification checking every 15 seconds
  * - Recurring notification rescheduling
  * - Quiet hours enforcement
  * - Escalation (re-alert if not acknowledged)
+ * - Snooze functionality
+ *
+ * KEY DESIGN: The in-app toast + alarm sound system works independently
+ * of native Notification API support. Even on iOS Safari without PWA,
+ * the alarm sound and in-app toast will fire as long as the app is open.
  */
 
 import { playAlarm, stopAlarm } from './alarmSounds';
 
-// Check if notifications are supported
+// ============================================
+// NATIVE NOTIFICATION SUPPORT CHECKS
+// ============================================
+
+// Check if native browser notifications are supported
 export const isNotificationSupported = () => {
-  return 'Notification' in window && 'serviceWorker' in navigator;
+  return 'Notification' in window;
 };
 
 // Get current permission status
@@ -27,7 +36,8 @@ export const getPermissionStatus = () => {
 // Request notification permission
 export const requestPermission = async () => {
   if (!isNotificationSupported()) {
-    return { success: false, error: 'Notifications not supported on this device/browser' };
+    console.log('[Notifications] Native notifications not supported — in-app alerts still work');
+    return { success: false, error: 'Native notifications not supported, but in-app alerts work' };
   }
 
   try {
@@ -60,7 +70,10 @@ export const registerServiceWorker = async () => {
   }
 };
 
-// Get notification settings from localStorage
+// ============================================
+// SETTINGS
+// ============================================
+
 function getSettings() {
   try {
     return JSON.parse(localStorage.getItem('notificationSettings') || '{}');
@@ -84,48 +97,63 @@ function isQuietHours() {
   if (startMinutes <= endMinutes) {
     return currentMinutes >= startMinutes && currentMinutes < endMinutes;
   }
-  // Wraps midnight (e.g., 22:00 - 07:00)
   return currentMinutes >= startMinutes || currentMinutes < endMinutes;
 }
 
-// Show a local notification (for when app is open)
+// ============================================
+// SHOW NOTIFICATION (multi-layer)
+// ============================================
+
+/**
+ * Show a notification using all available methods:
+ * 1. In-app toast (always works — custom DOM event)
+ * 2. Native Notification API (desktop browsers with permission)
+ * 3. Service Worker notification (iOS PWA with permission)
+ */
 export const showLocalNotification = (title, options = {}) => {
   const body = options.body || '';
 
-  // Always dispatch in-app event (NotificationToast listens for this)
-  window.dispatchEvent(new CustomEvent('app-notification', {
-    detail: {
-      title,
-      body,
-      options,
-      soundType: options.soundType || 'default',
-      requireInteraction: options.requireInteraction !== false,
-    }
-  }));
+  console.log('[Notifications] Firing notification:', title, body);
 
-  // Method 1: Try native Notification API
-  if (getPermissionStatus() === 'granted') {
-    const defaultOptions = {
-      icon: '/vite.svg',
-      badge: '/vite.svg',
-      vibrate: [200, 100, 200, 100, 200],
-      requireInteraction: options.requireInteraction !== false,
-      tag: options.tag || 'goal-planner-notification-' + Date.now(),
-      renotify: true,
-      silent: false,
-      ...options
-    };
+  // LAYER 1: Always dispatch in-app event (NotificationToast listens for this)
+  // This works on ALL devices — no permission needed
+  try {
+    window.dispatchEvent(new CustomEvent('app-notification', {
+      detail: {
+        title,
+        body,
+        options,
+        soundType: options.soundType || 'default',
+        requireInteraction: options.requireInteraction !== false,
+      }
+    }));
+    console.log('[Notifications] In-app toast dispatched');
+  } catch (e) {
+    console.error('[Notifications] Failed to dispatch in-app event:', e);
+  }
 
+  // LAYER 2: Try native Notification API (works on desktop, Android, some iOS)
+  if (isNotificationSupported() && getPermissionStatus() === 'granted') {
     try {
-      const notification = new Notification(title, defaultOptions);
+      const notification = new Notification(title, {
+        body,
+        icon: '/vite.svg',
+        badge: '/vite.svg',
+        vibrate: [200, 100, 200, 100, 200],
+        requireInteraction: options.requireInteraction !== false,
+        tag: options.tag || 'goal-planner-' + Date.now(),
+        renotify: true,
+        silent: false,
+      });
+      console.log('[Notifications] Native notification shown');
       return notification;
     } catch (error) {
-      console.error('[Notifications] Native notification failed:', error);
+      console.log('[Notifications] Native notification failed (expected on iOS):', error.message);
     }
   }
 
-  // Method 2: Try via service worker (needed for iOS PWA)
-  if ('serviceWorker' in navigator) {
+  // LAYER 3: Try via service worker (needed for iOS PWA)
+  if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
     navigator.serviceWorker.ready.then(registration => {
       registration.showNotification(title, {
         body,
@@ -140,27 +168,34 @@ export const showLocalNotification = (title, options = {}) => {
           { action: 'snooze', title: 'Snooze' },
         ],
       });
-    }).catch(err => console.error('[Notifications] SW notification failed:', err));
+      console.log('[Notifications] SW notification shown');
+    }).catch(err => console.log('[Notifications] SW notification failed:', err.message));
   }
 };
 
-// Play notification sound using Web Audio synthesizer
+// ============================================
+// SOUND CONTROLS
+// ============================================
+
 export const playNotificationSound = (soundType = 'default', volume = 70, loop = false) => {
   const settings = getSettings();
   const vol = settings.soundVolume || volume;
+  console.log('[Notifications] Playing sound:', soundType, 'volume:', vol);
   return playAlarm(soundType, vol, loop);
 };
 
-// Stop currently playing notification sound
 export const stopNotificationSound = () => {
   stopAlarm();
 };
 
-// Schedule a notification (stores in localStorage, checked periodically)
+// ============================================
+// SCHEDULING
+// ============================================
+
 export const scheduleNotification = (notification) => {
   const scheduled = getScheduledNotifications();
   const newNotification = {
-    id: Date.now().toString(),
+    id: Date.now().toString() + '_' + Math.random().toString(36).substr(2, 4),
     ...notification,
     createdAt: new Date().toISOString(),
   };
@@ -168,10 +203,10 @@ export const scheduleNotification = (notification) => {
   scheduled.push(newNotification);
   localStorage.setItem('scheduledNotifications', JSON.stringify(scheduled));
 
+  console.log('[Notifications] Scheduled:', newNotification.title, 'for', newNotification.triggerAt);
   return newNotification;
 };
 
-// Get all scheduled notifications
 export const getScheduledNotifications = () => {
   try {
     return JSON.parse(localStorage.getItem('scheduledNotifications') || '[]');
@@ -180,13 +215,11 @@ export const getScheduledNotifications = () => {
   }
 };
 
-// Remove a scheduled notification
 export const removeScheduledNotification = (id) => {
   const scheduled = getScheduledNotifications().filter(n => n.id !== id);
   localStorage.setItem('scheduledNotifications', JSON.stringify(scheduled));
 };
 
-// Clear all scheduled notifications
 export const clearScheduledNotifications = () => {
   localStorage.setItem('scheduledNotifications', JSON.stringify([]));
 };
@@ -221,7 +254,6 @@ function rescheduleRecurring(notification) {
       next.setDate(next.getDate() + 1);
   }
 
-  // Update the notification in storage
   const scheduled = getScheduledNotifications();
   const updated = scheduled.map(n => {
     if (n.id === notification.id) {
@@ -232,27 +264,36 @@ function rescheduleRecurring(notification) {
   localStorage.setItem('scheduledNotifications', JSON.stringify(updated));
 }
 
-// Track unacknowledged notifications for escalation
+// ============================================
+// ESCALATION TRACKING
+// ============================================
+
 const unacknowledged = new Map();
 
-// Acknowledge a notification (called from NotificationToast on dismiss/snooze)
 export const acknowledgeNotification = (id) => {
   unacknowledged.delete(id);
 };
 
-// Check and trigger due notifications (called periodically)
+// ============================================
+// DUE NOTIFICATION CHECKER (runs every 15 seconds)
+// ============================================
+
 export const checkDueNotifications = () => {
-  if (isQuietHours()) return; // Respect quiet hours
+  if (isQuietHours()) return;
 
   const now = new Date();
   const scheduled = getScheduledNotifications();
   const settings = getSettings();
 
+  let firedCount = 0;
+
   scheduled.forEach(notification => {
     const triggerTime = new Date(notification.triggerAt);
 
     if (triggerTime <= now && !notification.triggered) {
-      // Trigger the notification
+      firedCount++;
+
+      // Show the in-app toast (NotificationToast handles its own sound)
       showLocalNotification(notification.title, {
         body: notification.body,
         tag: notification.id,
@@ -260,11 +301,6 @@ export const checkDueNotifications = () => {
         soundType: notification.soundType || 'default',
         requireInteraction: true,
       });
-
-      // Play sound if enabled
-      if (notification.sound !== false) {
-        playNotificationSound(notification.soundType || 'default');
-      }
 
       // Track for escalation
       if (settings.escalationEnabled) {
@@ -283,29 +319,33 @@ export const checkDueNotifications = () => {
     }
   });
 
+  if (firedCount > 0) {
+    console.log(`[Notifications] Fired ${firedCount} notification(s)`);
+  }
+
   // Escalation check: re-alert for unacknowledged notifications
   if (settings.escalationEnabled) {
     const escalateAfterMs = (settings.escalationAfterMinutes || 5) * 60 * 1000;
 
     unacknowledged.forEach((notif, id) => {
       if (Date.now() - notif.firedAt > escalateAfterMs) {
-        // Escalate with urgent sound
         showLocalNotification(`${notif.title}`, {
           body: `REMINDER: ${notif.body || 'You have an unacknowledged alert!'}`,
           tag: `escalation-${id}`,
           soundType: settings.escalationSound || 'urgent',
           requireInteraction: true,
         });
-        playNotificationSound(settings.escalationSound || 'urgent');
 
-        // Reset timer so it escalates again if still not acknowledged
         unacknowledged.set(id, { ...notif, firedAt: Date.now() });
       }
     });
   }
 };
 
-// Snooze a notification (reschedule for N minutes from now)
+// ============================================
+// SNOOZE
+// ============================================
+
 export const snoozeNotification = (title, body, data = {}) => {
   const settings = getSettings();
   const snoozeMins = settings.snoozeDuration || 10;
@@ -321,10 +361,13 @@ export const snoozeNotification = (title, body, data = {}) => {
     data,
   });
 
-  console.log(`[Notifications] Snoozed for ${snoozeMins} minutes`);
+  console.log(`[Notifications] Snoozed "${title}" for ${snoozeMins} minutes`);
 };
 
-// Notification types for the app
+// ============================================
+// NOTIFICATION TYPES
+// ============================================
+
 export const NotificationType = {
   TASK_REMINDER: 'task_reminder',
   HABIT_REMINDER: 'habit_reminder',
@@ -336,18 +379,53 @@ export const NotificationType = {
   CUSTOM: 'custom',
 };
 
-// Create a task reminder notification
+// ============================================
+// REMINDER FACTORY FUNCTIONS
+// ============================================
+
+/**
+ * Create a task reminder notification.
+ * IMPORTANT: Uses local timezone for date parsing to avoid UTC offset bugs.
+ */
 export const createTaskReminder = (task, minutesBefore = 15) => {
-  if (!task.scheduledDate || !task.startTime) return null;
+  if (!task.scheduledDate || !task.startTime) {
+    console.log('[Notifications] Skipping reminder — no scheduledDate or startTime:', task.title);
+    return null;
+  }
 
-  const taskDateTime = new Date(`${task.scheduledDate.split('T')[0]}T${task.startTime}`);
-  const triggerTime = new Date(taskDateTime.getTime() - minutesBefore * 60 * 1000);
+  // Parse the scheduled date in LOCAL timezone (not UTC)
+  // task.scheduledDate could be ISO string like "2026-03-20T14:00:00.000Z"
+  // or a date string like "2026-03-20"
+  const dateStr = task.scheduledDate;
+  let taskDate;
 
-  if (triggerTime <= new Date()) return null; // Already past
+  if (dateStr.includes('T')) {
+    // It's an ISO string — parse as a Date object to get the local date parts
+    const parsed = new Date(dateStr);
+    const year = parsed.getFullYear();
+    const month = parsed.getMonth();
+    const day = parsed.getDate();
+    const [hours, minutes] = task.startTime.split(':').map(Number);
+    taskDate = new Date(year, month, day, hours, minutes, 0, 0);
+  } else {
+    // Simple date string like "2026-03-20"
+    const [year, month, day] = dateStr.split('-').map(Number);
+    const [hours, minutes] = task.startTime.split(':').map(Number);
+    taskDate = new Date(year, month - 1, day, hours, minutes, 0, 0);
+  }
+
+  const triggerTime = new Date(taskDate.getTime() - minutesBefore * 60 * 1000);
+
+  if (triggerTime <= new Date()) {
+    console.log('[Notifications] Skipping reminder — already past:', task.title, triggerTime.toLocaleString());
+    return null;
+  }
+
+  console.log('[Notifications] Scheduling reminder for:', task.title, 'at', triggerTime.toLocaleString());
 
   return scheduleNotification({
     type: NotificationType.TASK_REMINDER,
-    title: `Task: ${task.title}`,
+    title: `Reminder: ${task.title}`,
     body: `Starting in ${minutesBefore} minutes`,
     triggerAt: triggerTime.toISOString(),
     sound: true,
@@ -449,30 +527,36 @@ export const createReflectionReminder = (time) => {
   });
 };
 
-// Track initialization to prevent duplicate intervals/listeners
+// ============================================
+// INITIALIZATION
+// ============================================
+
 let isInitialized = false;
 
-// Initialize notification system
+/**
+ * Initialize the notification system.
+ * ALWAYS starts the check loop — even without native notification support.
+ * The in-app toast + alarm sound works on ALL devices.
+ */
 export const initializeNotifications = async () => {
-  // Idempotent — safe to call multiple times
   if (isInitialized) {
     console.log('[Notifications] Already initialized, skipping');
     return { success: true, alreadyInitialized: true };
   }
 
-  if (!isNotificationSupported()) {
-    console.warn('[Notifications] Not supported');
-    return { success: false, error: 'Not supported' };
-  }
+  console.log('[Notifications] Initializing...');
+  console.log('[Notifications] Native Notification API:', isNotificationSupported() ? 'YES' : 'NO');
+  console.log('[Notifications] Permission:', isNotificationSupported() ? Notification.permission : 'N/A');
+  console.log('[Notifications] Service Worker:', 'serviceWorker' in navigator ? 'YES' : 'NO');
 
-  // Register service worker
-  const swResult = await registerServiceWorker();
-  if (!swResult.success) {
-    console.warn('[Notifications] Service worker registration failed:', swResult.error);
-  }
-
-  // Listen for snooze messages from service worker
+  // Try to register service worker (for background support + iOS PWA)
   if ('serviceWorker' in navigator) {
+    const swResult = await registerServiceWorker();
+    if (swResult.success) {
+      console.log('[Notifications] Service Worker ready');
+    }
+
+    // Listen for messages from service worker
     navigator.serviceWorker.addEventListener('message', (event) => {
       if (event.data?.type === 'SCHEDULE_SNOOZE') {
         const { notification } = event.data;
@@ -485,18 +569,26 @@ export const initializeNotifications = async () => {
   }
 
   // Start checking for due notifications every 15 seconds
-  setInterval(checkDueNotifications, 15000);
+  // This is the CORE of the system — runs regardless of native notification support
+  setInterval(() => {
+    checkDueNotifications();
+  }, 15000);
 
-  // Check immediately
+  // Check immediately on init
   checkDueNotifications();
 
   isInitialized = true;
-  console.log('[Notifications] System initialized — checking every 15 seconds');
+
+  const scheduledCount = getScheduledNotifications().length;
+  console.log(`[Notifications] System initialized — ${scheduledCount} notifications scheduled, checking every 15s`);
 
   return { success: true };
 };
 
-// Export everything for use
+// ============================================
+// EXPORTS
+// ============================================
+
 export default {
   isNotificationSupported,
   getPermissionStatus,
