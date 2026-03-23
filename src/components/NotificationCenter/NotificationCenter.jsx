@@ -38,6 +38,7 @@ import {
   createMorningRoutineReminder,
   createNightRoutineReminder,
   createReflectionReminder,
+  subscribeToPush,
 } from '../../services/notifications';
 import {
   isFirebaseConfigured,
@@ -54,6 +55,7 @@ export default function NotificationCenter() {
     notificationSettings,
     saveNotificationSettings,
     tasks,
+    user,
   } = useApp();
 
   const [permissionStatus, setPermissionStatus] = useState('default');
@@ -187,6 +189,14 @@ export default function NotificationCenter() {
       if (result.success) {
         // Initialize the notification system
         await initializeNotifications();
+
+        // Subscribe to Web Push for background/lock-screen notifications
+        if (user?.id) {
+          const pushResult = await subscribeToPush(user.id);
+          if (pushResult.success) {
+            console.log('[NotificationCenter] Web Push subscription active');
+          }
+        }
 
         // If Firebase is configured, get FCM token for push notifications
         if (isFirebaseConfigured()) {

@@ -20,6 +20,7 @@ import {
   removeScheduledNotification,
   getScheduledNotifications,
   scheduleNotification,
+  subscribeToPush,
   NotificationType,
 } from '../services/notifications';
 
@@ -307,9 +308,18 @@ export function AppProvider({ children }) {
       setIsLoading(false);
       console.log('[AppContext] loadData complete, dataLoadedRef=true');
 
-      // Initialize notification system (starts 30-second check loop)
+      // Initialize notification system (starts 15-second check loop)
       initializeNotifications().then(() => {
         console.log('[AppContext] Notification system initialized');
+
+        // Auto-subscribe to Web Push if user is authenticated and permission granted
+        if (user?.id && 'Notification' in window && Notification.permission === 'granted') {
+          subscribeToPush(user.id).then(result => {
+            if (result.success) {
+              console.log('[AppContext] Web Push subscription active');
+            }
+          }).catch(() => {});
+        }
       }).catch(err => {
         console.warn('[AppContext] Notification init failed:', err);
       });
@@ -1989,6 +1999,9 @@ export function AppProvider({ children }) {
     importAllData,
     syncFromCloud,
     pushAllToCloud,
+
+    // Auth
+    user,
 
     // Undo/Redo
     undo,

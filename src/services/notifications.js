@@ -17,6 +17,10 @@
  */
 
 import { playAlarm, stopAlarm } from './alarmSounds';
+import { supabase, isSupabaseConfigured } from './supabase';
+
+// VAPID public key for Web Push subscription
+const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY || '';
 
 // ============================================
 // NATIVE NOTIFICATION SUPPORT CHECKS
@@ -604,6 +608,128 @@ export const initializeNotifications = async () => {
 };
 
 // ============================================
+// WEB PUSH SUBSCRIPTION
+// ============================================
+
+/**
+ * Convert a base64 VAPID key to Uint8Array (required by pushManager.subscribe)
+ */
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+/**
+ * Subscribe this device to Web Push notifications.
+ * Stores the subscription in Supabase so the server can send push messages.
+ * Must be called after the user grants notification permission.
+ *
+ * @param {string} userId - The authenticated user's ID
+ * @returns {Promise<{success: boolean, error?: string}>}
+ */
+export const subscribeToPush = async (userId) => {
+  if (!VAPID_PUBLIC_KEY) {
+    console.log('[Push] No VAPID public key configured — skipping push subscription');
+    return { success: false, error: 'VAPID key not configured' };
+  }
+
+  if (!isSupabaseConfigured || !supabase) {
+    console.log('[Push] Supabase not configured — skipping push subscription');
+    return { success: false, error: 'Supabase not configured' };
+  }
+
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+    console.log('[Push] PushManager not supported');
+    return { success: false, error: 'Push not supported in this browser' };
+  }
+
+  try {
+    const registration = await navigator.serviceWorker.ready;
+
+    // Check for existing subscription
+    let subscription = await registration.pushManager.getSubscription();
+
+    if (!subscription) {
+      // Subscribe to push
+      subscription = await registration.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+      });
+      console.log('[Push] New push subscription created');
+    } else {
+      console.log('[Push] Existing push subscription found');
+    }
+
+    // Extract subscription data
+    const subJSON = subscription.toJSON();
+    const endpoint = subJSON.endpoint;
+    const p256dh = subJSON.keys.p256dh;
+    const auth = subJSON.keys.auth;
+
+    // Store in Supabase (upsert by endpoint)
+    const { error } = await supabase
+      .from('push_subscriptions')
+      .upsert({
+        user_id: userId,
+        endpoint,
+        keys_p256dh: p256dh,
+        keys_auth: auth,
+        user_agent: navigator.userAgent,
+        updated_at: new Date().toISOString(),
+      }, {
+        onConflict: 'endpoint',
+      });
+
+    if (error) {
+      console.error('[Push] Failed to store subscription:', error);
+      return { success: false, error: error.message };
+    }
+
+    console.log('[Push] Subscription stored in Supabase');
+    return { success: true };
+  } catch (err) {
+    console.error('[Push] Subscription failed:', err);
+    return { success: false, error: err.message };
+  }
+};
+
+/**
+ * Unsubscribe this device from Web Push.
+ */
+export const unsubscribeFromPush = async () => {
+  try {
+    const registration = await navigator.serviceWorker.ready;
+    const subscription = await registration.pushManager.getSubscription();
+
+    if (subscription) {
+      const endpoint = subscription.endpoint;
+      await subscription.unsubscribe();
+
+      // Remove from Supabase
+      if (isSupabaseConfigured && supabase) {
+        await supabase
+          .from('push_subscriptions')
+          .delete()
+          .eq('endpoint', endpoint);
+      }
+
+      console.log('[Push] Unsubscribed successfully');
+    }
+
+    return { success: true };
+  } catch (err) {
+    console.error('[Push] Unsubscribe failed:', err);
+    return { success: false, error: err.message };
+  }
+};
+
+// ============================================
 // EXPORTS
 // ============================================
 
@@ -628,5 +754,7 @@ export default {
   createNightRoutineReminder,
   createReflectionReminder,
   initializeNotifications,
+  subscribeToPush,
+  unsubscribeFromPush,
   NotificationType,
 };
