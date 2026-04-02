@@ -403,65 +403,65 @@ export default function MainLayout({ leftPanel, rightPanel }) {
                 <div className="user-menu-divider" />
 
                 {/* Google Calendar */}
-                {isGoogleCalendarConfigured() && (
+                {gcalConnected ? (
                   <>
-                    {gcalConnected ? (
-                      <>
-                        <button
-                          className="user-menu-item gcal-connected"
-                          onClick={async () => {
-                            setGcalSyncing(true);
-                            try {
-                              const result = await syncAllTasksToGoogle(tasks);
-                              alert(`Synced ${result.synced} events to Google Calendar`);
-                            } catch (err) {
-                              alert('Sync failed: ' + err.message);
-                            }
-                            setGcalSyncing(false);
-                          }}
-                          disabled={gcalSyncing}
-                        >
-                          <CalendarCheck size={16} />
-                          <span>{gcalSyncing ? 'Syncing...' : 'Sync to Google Calendar'}</span>
-                        </button>
-                        <button
-                          className="user-menu-item"
-                          onClick={() => {
-                            signOutOfGoogle();
-                            setGcalConnected(false);
-                            setShowUserMenu(false);
-                          }}
-                        >
-                          <CalendarDays size={16} />
-                          <span>Disconnect Google Calendar</span>
-                        </button>
-                      </>
-                    ) : (
-                      <button
-                        className="user-menu-item gcal-connect"
-                        onClick={async () => {
-                          try {
-                            await signInToGoogle();
-                            setGcalConnected(true);
-                            // Sync all existing tasks
-                            setGcalSyncing(true);
-                            const result = await syncAllTasksToGoogle(tasks);
-                            setGcalSyncing(false);
-                            alert(`Connected! Synced ${result.synced} events to Google Calendar.`);
-                          } catch (err) {
-                            console.error('[GCal] Sign-in failed:', err);
-                            alert('Google sign-in failed. Please try again.');
-                          }
-                          setShowUserMenu(false);
-                        }}
-                      >
-                        <CalendarCheck size={16} />
-                        <span>Connect Google Calendar</span>
-                      </button>
-                    )}
-                    <div className="user-menu-divider" />
+                    <button
+                      className="user-menu-item gcal-connected"
+                      onClick={async () => {
+                        setGcalSyncing(true);
+                        try {
+                          const result = await syncAllTasksToGoogle(tasks);
+                          alert(`Synced ${result.synced} events to Google Calendar`);
+                        } catch (err) {
+                          alert('Sync failed: ' + err.message);
+                        }
+                        setGcalSyncing(false);
+                      }}
+                      disabled={gcalSyncing}
+                    >
+                      <CalendarCheck size={16} />
+                      <span>{gcalSyncing ? 'Syncing...' : 'Sync to Google Calendar'}</span>
+                    </button>
+                    <button
+                      className="user-menu-item"
+                      onClick={() => {
+                        signOutOfGoogle();
+                        setGcalConnected(false);
+                        setShowUserMenu(false);
+                      }}
+                    >
+                      <CalendarDays size={16} />
+                      <span>Disconnect Google Calendar</span>
+                    </button>
                   </>
+                ) : (
+                  <button
+                    className="user-menu-item gcal-connect"
+                    onClick={async () => {
+                      if (!isGoogleCalendarConfigured()) {
+                        alert('Google Calendar is not configured yet. Please add VITE_GOOGLE_CLIENT_ID to your Vercel environment variables and redeploy.');
+                        return;
+                      }
+                      try {
+                        await signInToGoogle();
+                        setGcalConnected(true);
+                        // Sync all existing tasks
+                        setGcalSyncing(true);
+                        const result = await syncAllTasksToGoogle(tasks);
+                        setGcalSyncing(false);
+                        alert(`Connected! Synced ${result.synced} events to Google Calendar.`);
+                      } catch (err) {
+                        console.error('[GCal] Sign-in failed:', err);
+                        alert('Google sign-in failed. Please try again.');
+                      }
+                      setShowUserMenu(false);
+                    }}
+                  >
+                    <CalendarCheck size={16} />
+                    <span>Connect Google Calendar</span>
+                  </button>
                 )}
+                <div className="user-menu-divider" />
 
 
                 {/* Features */}
