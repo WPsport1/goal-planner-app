@@ -23,13 +23,6 @@ import {
   subscribeToPush,
   NotificationType,
 } from '../services/notifications';
-import {
-  isGoogleSignedIn,
-  createGoogleEvent,
-  updateGoogleEvent,
-  deleteGoogleEvent,
-  initGoogleCalendar,
-} from '../services/googleCalendar';
 
 // ============================================
 // BULLETPROOF localStorage helpers
@@ -314,9 +307,6 @@ export function AppProvider({ children }) {
       dataLoadedRef.current = true;
       setIsLoading(false);
       console.log('[AppContext] loadData complete, dataLoadedRef=true');
-
-      // Initialize Google Calendar (loads GIS script, restores token)
-      initGoogleCalendar().catch(() => {});
 
       // Initialize notification system (starts 15-second check loop)
       initializeNotifications().then(() => {
@@ -974,13 +964,6 @@ export function AppProvider({ children }) {
       }
     }
 
-    // Sync to Google Calendar
-    if (isGoogleSignedIn() && newTask.scheduledDate && newTask.startTime) {
-      createGoogleEvent(newTask).catch(err => {
-        console.error('[GCal] Auto-sync create failed:', err);
-      });
-    }
-
     return newTask;
   };
 
@@ -1033,15 +1016,6 @@ export function AppProvider({ children }) {
       }
     }
 
-    // Sync to Google Calendar
-    if (isGoogleSignedIn()) {
-      const merged = { ...oldTask, ...updates };
-      if (merged.scheduledDate && merged.startTime) {
-        updateGoogleEvent(id, merged).catch(err => {
-          console.error('[GCal] Auto-sync update failed:', err);
-        });
-      }
-    }
   };
 
   const deleteTask = async (id) => {
@@ -1075,12 +1049,6 @@ export function AppProvider({ children }) {
       }
     }
 
-    // Remove from Google Calendar
-    if (isGoogleSignedIn()) {
-      deleteGoogleEvent(id).catch(err => {
-        console.error('[GCal] Auto-sync delete failed:', err);
-      });
-    }
   };
 
   const toggleTaskComplete = async (id) => {

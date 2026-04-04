@@ -35,13 +35,6 @@ import {
   Redo2,
 } from 'lucide-react';
 import AuthPage from '../Auth/AuthPage';
-import {
-  isGoogleCalendarConfigured,
-  isGoogleSignedIn,
-  signInToGoogle,
-  signOutOfGoogle,
-  syncAllTasksToGoogle,
-} from '../../services/googleCalendar';
 import './MainLayout.css';
 
 export default function MainLayout({ leftPanel, rightPanel }) {
@@ -77,8 +70,6 @@ export default function MainLayout({ leftPanel, rightPanel }) {
   const { theme, toggleTheme, isDark } = useTheme();
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
-  const [gcalConnected, setGcalConnected] = useState(isGoogleSignedIn());
-  const [gcalSyncing, setGcalSyncing] = useState(false);
   const [mobilePanel, setMobilePanel] = useState('list'); // 'list' or 'calendar'
   const [isMobile, setIsMobile] = useState(window.innerWidth <= 768);
   const menuRef = useRef(null);
@@ -402,63 +393,19 @@ export default function MainLayout({ leftPanel, rightPanel }) {
 
                 <div className="user-menu-divider" />
 
-                {/* Google Calendar */}
-                {gcalConnected ? (
-                  <>
-                    <button
-                      className="user-menu-item gcal-connected"
-                      onClick={async () => {
-                        setGcalSyncing(true);
-                        try {
-                          const result = await syncAllTasksToGoogle(tasks);
-                          alert(`Synced ${result.synced} events to Google Calendar`);
-                        } catch (err) {
-                          alert('Sync failed: ' + err.message);
-                        }
-                        setGcalSyncing(false);
-                      }}
-                      disabled={gcalSyncing}
-                    >
-                      <CalendarCheck size={16} />
-                      <span>{gcalSyncing ? 'Syncing...' : 'Sync to Google Calendar'}</span>
-                    </button>
-                    <button
-                      className="user-menu-item"
-                      onClick={() => {
-                        signOutOfGoogle();
-                        setGcalConnected(false);
-                        setShowUserMenu(false);
-                      }}
-                    >
-                      <CalendarDays size={16} />
-                      <span>Disconnect Google Calendar</span>
-                    </button>
-                  </>
-                ) : (
+                {/* iPhone Calendar Subscription */}
+                {user && (
                   <button
-                    className="user-menu-item gcal-connect"
-                    onClick={async () => {
-                      if (!isGoogleCalendarConfigured()) {
-                        alert('Google Calendar is not configured yet. Please add VITE_GOOGLE_CLIENT_ID to your Vercel environment variables and redeploy.');
-                        return;
-                      }
-                      try {
-                        await signInToGoogle();
-                        setGcalConnected(true);
-                        // Sync all existing tasks
-                        setGcalSyncing(true);
-                        const result = await syncAllTasksToGoogle(tasks);
-                        setGcalSyncing(false);
-                        alert(`Connected! Synced ${result.synced} events to Google Calendar.`);
-                      } catch (err) {
-                        console.error('[GCal] Sign-in failed:', err);
-                        alert('Google sign-in failed. Please try again.');
-                      }
+                    className="user-menu-item"
+                    onClick={() => {
+                      const baseUrl = window.location.origin;
+                      const subUrl = `webcal://${baseUrl.replace(/^https?:\/\//, '')}/api/calendar.ics?uid=${user.id}`;
+                      window.location.href = subUrl;
                       setShowUserMenu(false);
                     }}
                   >
                     <CalendarCheck size={16} />
-                    <span>Connect Google Calendar</span>
+                    <span>Subscribe in iPhone Calendar</span>
                   </button>
                 )}
                 <div className="user-menu-divider" />
